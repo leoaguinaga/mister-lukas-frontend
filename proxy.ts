@@ -9,12 +9,24 @@ const ROLE_HOME: Record<string, string> = {
   administracion: '/admin',
 };
 
+const SESSION_COOKIE_NAMES = ['__Secure-better-auth.session_token', 'better-auth.session_token'];
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const sessionCookie = request.cookies.get('better-auth.session_token');
+  let sessionCookieName: string | null = null;
+  let sessionCookieValue: string | null = null;
 
-  if (!sessionCookie?.value) {
+  for (const name of SESSION_COOKIE_NAMES) {
+    const cookie = request.cookies.get(name);
+    if (cookie?.value) {
+      sessionCookieName = name;
+      sessionCookieValue = cookie.value;
+      break;
+    }
+  }
+
+  if (!sessionCookieValue) {
     if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
       return NextResponse.next();
     }
@@ -24,7 +36,7 @@ export async function proxy(request: NextRequest) {
   const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/api$/, '') ?? 'http://localhost:4000';
 
   const session = await fetch(`${backendUrl}/api/auth/get-session`, {
-    headers: { cookie: `better-auth.session_token=${sessionCookie.value}` },
+    headers: { cookie: `${sessionCookieName}=${sessionCookieValue}` },
   }).then((res) => (res.ok ? res.json() : null)).catch(() => null);
 
   if (!session?.user) {
@@ -32,7 +44,9 @@ export async function proxy(request: NextRequest) {
       return NextResponse.next();
     }
     const response = NextResponse.redirect(new URL('/login', request.url));
-    response.cookies.delete('better-auth.session_token');
+    if (sessionCookieName) {
+      response.cookies.delete(sessionCookieName);
+    }
     return response;
   }
 
