@@ -45,7 +45,7 @@ function EditModal({ plato, onClose, onSaved }: { plato: PlatoCarta; onClose: ()
         categoriaInventario: form.categoriaInventario,
         tipoPlato:           form.categoriaInventario === 'multi_insumo' ? form.tipoPlato : null,
       });
-      onSaved({ ...plato, ...form, precio: precio.toFixed(2), tipoPlato: form.categoriaInventario === 'multi_insumo' ? form.tipoPlato : null });
+      onSaved({ ...plato, nombre: form.nombre, precio: precio.toFixed(2), categoriaInventario: form.categoriaInventario as PlatoCarta['categoriaInventario'], tipoPlato: form.categoriaInventario === 'multi_insumo' ? form.tipoPlato : null });
       toast.success(`"${form.nombre}" actualizado`);
       onClose();
     } catch (err) {

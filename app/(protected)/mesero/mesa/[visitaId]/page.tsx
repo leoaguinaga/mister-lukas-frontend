@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
@@ -25,6 +25,9 @@ export default function MesaPage() {
   const [lineas, setLineas] = useState<Map<string, LineaPedido>>(new Map());
   const [enviando, setEnviando] = useState(false);
   const [marcando, setMarcando] = useState<string | null>(null);
+  const [cartaAbierta, setCartaAbierta] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const cartaRef = useRef<HTMLDivElement>(null);
 
   const platoMap = useMemo(() => new Map(menu.map((p) => [p.id, p])), [menu]);
 
@@ -113,6 +116,20 @@ export default function MesaPage() {
     }
   }
 
+  async function handleCancelarApertura() {
+    if (!visita) return;
+    setCancelando(true);
+    try {
+      await api.visitas.cerrar(visita.id);
+      toast.success('Mesa cerrada');
+      router.push('/mesero');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al cerrar');
+    } finally {
+      setCancelando(false);
+    }
+  }
+
   async function handleToggleDisponible(platoId: string, actual: boolean) {
     try {
       await api.menu.toggleDisponible(platoId, !actual);
@@ -124,6 +141,21 @@ export default function MesaPage() {
       toast.error(err instanceof Error ? err.message : 'Error');
     }
   }
+
+  const sinRondasActivas = (visita?.pedidos ?? []).filter(
+    (p) => p.estado !== 'cancelado' && p.estado !== 'entregado'
+  ).length === 0;
+
+  const TIPO_CARTA: Array<{ label: string; filter: (p: PlatoCarta) => boolean }> = [
+    { label: 'Entradas',           filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'entradas' },
+    { label: 'Platos a la carta',  filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'platos_a_la_carta' },
+    { label: 'Parrillas',          filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'parrillas' },
+    { label: 'Parrillas Familiares', filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'parrillas_familiares' },
+    { label: 'Pastas',             filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'pastas' },
+    { label: 'Guarniciones',       filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'guarniciones' },
+    { label: 'Pollo a la brasa',   filter: (p) => p.categoriaInventario === 'fraccionable' },
+    { label: 'Bebidas',            filter: (p) => p.categoriaInventario === 'reventa' },
+  ];
 
   // Agrupar menu por categoría para mostrar
   const categorias: Array<{ label: string; key: string }> = [
@@ -144,19 +176,70 @@ export default function MesaPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-56px)]">
+      {/* Overlay carta */}
+      {cartaAbierta && (
+        <div className="fixed inset-0 z-50 bg-[var(--crema)] overflow-y-auto">
+          <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-3 bg-[var(--carbon)] text-white">
+            <p className="font-semibold text-sm">Carta — Mister Luka</p>
+            <button
+              onClick={() => setCartaAbierta(false)}
+              className="text-white/70 hover:text-white text-xl leading-none"
+            >
+              ×
+            </button>
+          </div>
+          <div ref={cartaRef} className="p-5 space-y-6 max-w-lg mx-auto">
+            {TIPO_CARTA.map(({ label, filter }) => {
+              const items = menu.filter((p) => p.activo && p.disponible && filter(p));
+              if (!items.length) return null;
+              return (
+                <section key={label}>
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">{label}</h3>
+                  <div className="rounded-2xl border border-border bg-white overflow-hidden divide-y divide-border">
+                    {items.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between px-4 py-3">
+                        <p className="font-medium text-sm text-[var(--carbon)]">{p.nombre}</p>
+                        <p className="text-sm font-semibold text-[var(--carbon)]">S/{p.precio}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Sub-header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-white">
-        <button
-          onClick={() => router.push('/mesero')}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          ← Mesas
-        </button>
+        <div className="flex flex-col items-start gap-0.5">
+          <button
+            onClick={() => router.push('/mesero')}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            ← Mesas
+          </button>
+          {sinRondasActivas && visita.pedidos.length === 0 && (
+            <button
+              onClick={handleCancelarApertura}
+              disabled={cancelando}
+              className="text-xs text-[var(--terracota)] hover:underline disabled:opacity-50"
+            >
+              {cancelando ? 'Cerrando…' : 'Cancelar apertura'}
+            </button>
+          )}
+        </div>
         <div className="text-center">
           <p className="text-xs text-muted-foreground">Total visita</p>
           <p className="font-bold text-[var(--carbon)]">S/{visita.total}</p>
         </div>
-        <div className="w-16" />
+        <button
+          onClick={() => setCartaAbierta(true)}
+          className="flex flex-col items-center gap-0.5 text-muted-foreground hover:text-[var(--carbon)] transition-colors"
+        >
+          <span className="text-lg leading-none">📋</span>
+          <span className="text-xs">Carta</span>
+        </button>
       </div>
 
       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 overflow-hidden">
