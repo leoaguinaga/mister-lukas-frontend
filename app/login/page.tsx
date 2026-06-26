@@ -31,9 +31,8 @@ export default function LoginPage() {
         return;
       }
 
-      const role = result.data.user.role as Rol | undefined;
       toast.success(`Bienvenido, ${result.data.user.name ?? ''}`);
-      router.push(role ? homeForRole(role) : '/');
+      router.push('/');
     } catch {
       toast.error('Error de conexión con el servidor');
     } finally {
