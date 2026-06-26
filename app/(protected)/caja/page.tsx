@@ -127,7 +127,9 @@ function ModalCobro({
       <div className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-          <h3 className="font-bold text-lg text-[var(--carbon)]">Mesa {visita.mesaNumero}</h3>
+          <h3 className="font-bold text-lg text-[var(--carbon)]">
+            {visita.paraLlevar ? '🥡 Para llevar' : `Mesa ${visita.mesaNumero}`}
+          </h3>
           <button onClick={onCerrar} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
         </div>
 
@@ -456,7 +458,9 @@ export default function CajaPage() {
                   className="w-full flex items-center justify-between rounded-xl border bg-white px-4 py-4 hover:bg-muted/40 transition-colors text-left"
                 >
                   <div className="space-y-0.5">
-                    <p className="font-bold text-lg text-[var(--carbon)]">Mesa {v.mesaNumero}</p>
+                    <p className="font-bold text-lg text-[var(--carbon)]">
+                      {v.paraLlevar ? '🥡 Para llevar' : `Mesa ${v.mesaNumero}`}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       Desde {hora} · {v.pedidos} ronda{v.pedidos !== 1 ? 's' : ''}
                     </p>

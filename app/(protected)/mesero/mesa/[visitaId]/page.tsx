@@ -63,8 +63,10 @@ export default function MesaPage() {
 
   const itemsParaEnviar = Array.from(lineas.values()).filter((l) => l.cantidad > 0);
   const totalPedido = itemsParaEnviar.reduce((s, l) => {
-    const precio = parseFloat(platoMap.get(l.platoCartaId)?.precio ?? '0');
-    return s + precio * l.cantidad;
+    const plato = platoMap.get(l.platoCartaId);
+    const precio = parseFloat(plato?.precio ?? '0');
+    const recargo = visita?.paraLlevar && plato?.categoriaInventario !== 'reventa' ? 1 : 0;
+    return s + (precio + recargo) * l.cantidad;
   }, 0);
 
   async function handleEnviarPedido() {
@@ -199,7 +201,11 @@ export default function MesaPage() {
                     {items.map((p) => (
                       <div key={p.id} className="flex items-center justify-between px-4 py-3">
                         <p className="font-medium text-sm text-[var(--carbon)]">{p.nombre}</p>
-                        <p className="text-sm font-semibold text-[var(--carbon)]">S/{p.precio}</p>
+                        <p className="text-sm font-semibold text-[var(--carbon)]">
+                          S/{visita.paraLlevar && p.categoriaInventario !== 'reventa'
+                            ? (parseFloat(p.precio) + 1).toFixed(2)
+                            : p.precio}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -207,6 +213,14 @@ export default function MesaPage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Banner para llevar */}
+      {visita.paraLlevar && (
+        <div className="flex items-center gap-2 px-5 py-2 bg-[var(--dorado)]/10 border-b border-[var(--dorado)]/30">
+          <span className="text-base leading-none">🥡</span>
+          <span className="text-xs font-semibold text-[var(--dorado)]">Para llevar · +S/1.00 por plato</span>
         </div>
       )}
 
@@ -272,7 +286,11 @@ export default function MesaPage() {
                                 {plato.nombre}
                               </p>
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">S/{plato.precio}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  S/{visita.paraLlevar && plato.categoriaInventario !== 'reventa'
+                                    ? (parseFloat(plato.precio) + 1).toFixed(2)
+                                    : plato.precio}
+                                </span>
                                 {plato.categoriaInventario !== 'multi_insumo' && plato.stockActual !== null && (
                                   <span className={[
                                     'text-xs font-medium',

@@ -41,6 +41,8 @@ export const api = {
       }),
     cerrar: (visitaId: string) =>
       apiFetch(`/visits/${visitaId}/close`, { method: 'POST' }),
+    abrirParaLlevar: () =>
+      apiFetch<{ id: string }>('/visits/llevar', { method: 'POST' }),
   },
   pedidos: {
     cambiarEstado: (pedidoId: string, estado: string) =>
@@ -125,6 +127,7 @@ export interface PagoCaja {
 export interface VisitaResumen {
   visitaId: string;
   mesaNumero: number;
+  paraLlevar?: boolean;
   fechaApertura: string;
   total: string;
   pedidos: number;

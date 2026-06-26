@@ -47,6 +47,7 @@ export interface Visita {
   id: string;
   mesaId: string;
   estado: 'abierta' | 'cerrada';
+  paraLlevar: boolean;
   fechaApertura: string;
   fechaCierre: string | null;
   pedidos: Pedido[];

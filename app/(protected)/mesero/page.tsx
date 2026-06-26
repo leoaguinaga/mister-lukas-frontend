@@ -12,11 +12,13 @@ export default function MeseroHome() {
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [cargando, setCargando] = useState(true);
   const [abriendo, setAbriendo] = useState<string | null>(null);
+  const [abriendoLlevar, setAbriendoLlevar] = useState(false);
 
   const fetchMesas = useCallback(async () => {
     try {
       const data = await api.mesas.list();
-      setMesas(data);
+      // Excluir la mesa virtual 0 (para llevar) de la vista de mesas
+      setMesas(data.filter((m) => m.numero !== 0));
     } catch {
       // silencioso en polling
     } finally {
@@ -41,7 +43,6 @@ export default function MeseroHome() {
       return;
     }
 
-    // Confirmar apertura
     const ok = window.confirm(`¿Abrir mesa ${mesa.numero}?`);
     if (!ok) return;
 
@@ -54,6 +55,19 @@ export default function MeseroHome() {
       toast.error(err instanceof Error ? err.message : 'Error al abrir mesa');
     } finally {
       setAbriendo(null);
+    }
+  }
+
+  async function handleParaLlevar() {
+    setAbriendoLlevar(true);
+    try {
+      const visita = await api.visitas.abrirParaLlevar();
+      toast.success('Pedido para llevar abierto');
+      router.push(`/mesero/mesa/${visita.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al abrir pedido para llevar');
+    } finally {
+      setAbriendoLlevar(false);
     }
   }
 
@@ -82,6 +96,18 @@ export default function MeseroHome() {
             <MesaCard mesa={mesa} onClick={() => handleMesaClick(mesa)} />
           </div>
         ))}
+
+        {/* Botón Para llevar — siempre al final del grid */}
+        <button
+          onClick={handleParaLlevar}
+          disabled={abriendoLlevar}
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--dorado)] bg-[var(--dorado)]/5 hover:bg-[var(--dorado)]/10 transition-colors p-4 h-full min-h-[100px] disabled:opacity-50 disabled:pointer-events-none"
+        >
+          <span className="text-2xl leading-none">🥡</span>
+          <span className="text-sm font-semibold text-[var(--dorado)]">
+            {abriendoLlevar ? 'Abriendo…' : 'Para llevar'}
+          </span>
+        </button>
       </div>
     </div>
   );
