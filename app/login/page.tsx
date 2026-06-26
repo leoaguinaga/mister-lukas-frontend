@@ -18,18 +18,27 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
-    const result = await signIn.email({ email, password });
+    try {
+      const result = await signIn.email({ email, password });
 
-    setLoading(false);
+      if (result?.error) {
+        toast.error(result.error.message ?? 'No se pudo iniciar sesión');
+        return;
+      }
 
-    if (result.error) {
-      toast.error(result.error.message ?? 'No se pudo iniciar sesión');
-      return;
+      if (!result?.data?.user) {
+        toast.error('No se pudo iniciar sesión. Verificá tu conexión con el servidor.');
+        return;
+      }
+
+      const role = result.data.user.role as Rol | undefined;
+      toast.success(`Bienvenido, ${result.data.user.name ?? ''}`);
+      router.push(role ? homeForRole(role) : '/');
+    } catch {
+      toast.error('Error de conexión con el servidor');
+    } finally {
+      setLoading(false);
     }
-
-    const role = result.data?.user?.role as Rol | undefined;
-    toast.success(`Bienvenido, ${result.data?.user?.name ?? ''}`);
-    router.push(role ? homeForRole(role) : '/');
   }
 
   return (
