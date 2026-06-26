@@ -52,6 +52,11 @@ export const api = {
   monitor: {
     get: () => apiFetch<MonitorItem[]>('/monitor'),
   },
+  ticketeras: {
+    list:      () => apiFetch<PrinterInfo[]>('/admin/ticketeras'),
+    testPrint: (tipo: 'cocina' | 'recibos') =>
+      apiFetch<{ ok: boolean }>(`/admin/ticketeras/${tipo}/test`, { method: 'POST' }),
+  },
   admin: {
     turnosHoy:          () => apiFetch<TurnoResumen[]>('/cash/shifts'),
     listUsuarios:       () => apiFetch<UsuarioAdmin[]>('/admin/users'),
@@ -163,6 +168,15 @@ export interface MonitorItem {
   fechaCreacion: string;
   minutosEspera: number;
   items: Array<{ platoCartaId: string; cantidad: number; notas: string | null }>;
+}
+
+export interface PrinterInfo {
+  tipo: 'cocina' | 'recibos';
+  label: string;
+  ip: string;
+  port: number;
+  online: boolean;
+  latencyMs?: number;
 }
 
 export interface InsumoStock {

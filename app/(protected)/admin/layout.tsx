@@ -7,12 +7,13 @@ import { Toaster } from 'react-hot-toast';
 import Link from 'next/link';
 
 const TABS = [
-  { href: '/admin',           label: 'Inicio' },
-  { href: '/admin/mesas',     label: 'Mesas' },
-  { href: '/admin/stock',     label: 'Stock' },
-  { href: '/admin/catalogo',  label: 'Carta' },
-  { href: '/admin/usuarios',  label: 'Staff' },
-  { href: '/admin/turnos',    label: 'Caja' },
+  { href: '/admin',               label: 'Inicio' },
+  { href: '/admin/mesas',         label: 'Mesas' },
+  { href: '/admin/stock',         label: 'Stock' },
+  { href: '/admin/catalogo',      label: 'Carta' },
+  { href: '/admin/usuarios',      label: 'Staff' },
+  { href: '/admin/turnos',        label: 'Caja' },
+  { href: '/admin/ticketeras',    label: 'Ticketeras' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
