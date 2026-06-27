@@ -31,8 +31,43 @@ export interface ItemPedido {
   platoCartaId: string;
   cantidad: number;
   precioUnitarioCongelado: string;
+  descuentoUnitario: string;
+  promocionAplicadaId: string | null;
   notas: string | null;
   estado: EstadoPedido;
+}
+
+export type TipoDescuento = 'porcentaje' | 'monto_fijo';
+
+export interface Promocion {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  tipoDescuento: TipoDescuento;
+  valorDescuento: string;
+  diasSemana: number[]; // 1=lunes ... 7=domingo
+  horaInicio: string | null;
+  horaFin: string | null;
+  vigenteDesde: string | null;
+  vigenteHasta: string | null;
+  activo: boolean;
+  platoCartaIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertPromocion {
+  nombre: string;
+  descripcion?: string | null;
+  tipoDescuento: TipoDescuento;
+  valorDescuento: string;
+  diasSemana: number[];
+  horaInicio?: string | null;
+  horaFin?: string | null;
+  vigenteDesde?: string | null;
+  vigenteHasta?: string | null;
+  activo?: boolean;
+  platoCartaIds: string[];
 }
 
 export interface Pedido {

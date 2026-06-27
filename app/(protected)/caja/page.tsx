@@ -138,17 +138,44 @@ function ModalCobro({
           <div className="p-5 space-y-2">
             {detalle ? (
               <ul className="space-y-1.5">
-                {detalle.resumen.map((item, i) => (
-                  <li key={i} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{item.cantidad}× {item.nombre}</span>
-                    <span className="font-medium">S/{(parseFloat(item.precioUnitario) * item.cantidad).toFixed(2)}</span>
-                  </li>
-                ))}
+                {detalle.resumen.map((item, i) => {
+                  const descU = parseFloat(item.descuentoUnitario ?? '0');
+                  const descTotal = descU * item.cantidad;
+                  return (
+                    <li key={i} className="text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{item.cantidad}× {item.nombre}</span>
+                        <span className="font-medium">S/{(parseFloat(item.precioUnitario) * item.cantidad).toFixed(2)}</span>
+                      </div>
+                      {descU > 0 && (
+                        <div className="flex justify-between text-xs text-[var(--salvia)] pl-4">
+                          <span>↳ promo aplicada</span>
+                          <span>-S/{descTotal.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="text-sm text-muted-foreground">Cargando detalle…</p>
             )}
-            <div className="border-t border-border pt-3 flex justify-between font-bold text-base">
+            {detalle && parseFloat(detalle.descuentoTotal ?? '0') > 0 && (
+              <div className="border-t border-border pt-3 space-y-1 text-sm">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Subtotal</span>
+                  <span>S/{(parseFloat(detalle.total) + parseFloat(detalle.descuentoTotal!)).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-[var(--salvia)] font-medium">
+                  <span>Descuento</span>
+                  <span>-S/{detalle.descuentoTotal}</span>
+                </div>
+              </div>
+            )}
+            <div className={[
+              'border-border pt-3 flex justify-between font-bold text-base',
+              detalle && parseFloat(detalle.descuentoTotal ?? '0') > 0 ? '' : 'border-t',
+            ].join(' ')}>
               <span>Total</span>
               <span className="text-[var(--carbon)]">S/{(detalle?.total ?? visita.total)}</span>
             </div>

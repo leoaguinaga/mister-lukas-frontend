@@ -83,6 +83,18 @@ export const api = {
         body: JSON.stringify({ insumoId, cantidad, notas }),
       }),
     syncDisponible:     () => apiFetch<{ sincronizados: number; conStock: number; sinStock: number }>('/admin/stock/sync', { method: 'POST' }),
+    promociones: {
+      list:      () => apiFetch<import('./types').Promocion[]>('/admin/promociones'),
+      get:       (id: string) => apiFetch<import('./types').Promocion>(`/admin/promociones/${id}`),
+      create:    (data: import('./types').UpsertPromocion) =>
+        apiFetch<import('./types').Promocion>('/admin/promociones', { method: 'POST', body: JSON.stringify(data) }),
+      update:    (id: string, data: import('./types').UpsertPromocion) =>
+        apiFetch<import('./types').Promocion>(`/admin/promociones/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+      setActivo: (id: string, activo: boolean) =>
+        apiFetch(`/admin/promociones/${id}/activo`, { method: 'PATCH', body: JSON.stringify({ activo }) }),
+      remove:    (id: string) =>
+        apiFetch(`/admin/promociones/${id}`, { method: 'DELETE' }),
+    },
   },
   caja: {
     turnoActual: () => apiFetch<TurnoCaja | null>('/cash/shift/current'),
@@ -137,8 +149,9 @@ export interface DetalleVisitaCaja {
   visitaId: string;
   mesaNumero: number;
   fechaApertura: string;
-  resumen: Array<{ nombre: string; cantidad: number; precioUnitario: string }>;
+  resumen: Array<{ nombre: string; cantidad: number; precioUnitario: string; descuentoUnitario?: string }>;
   total: string;
+  descuentoTotal?: string;
 }
 
 export interface UsuarioAdmin {
