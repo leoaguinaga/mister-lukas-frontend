@@ -97,11 +97,15 @@ function EditModal({ plato, onClose, onSaved }: {
     if (isNaN(precio) || precio <= 0) { toast.error('Precio inválido'); return; }
 
     const tiposValidos = TIPOS_POR_CATEGORIA[form.categoriaInventario];
-    const tipoPlato = tiposValidos.length > 0 ? form.tipoPlato : null;
+    // Si hay subtipos y el estado es null (edge case al cambiar tipo y revertir),
+    // fallback al primero en lugar de enviar null y borrar la categoría.
+    const tipoPlato = tiposValidos.length > 0
+      ? (form.tipoPlato ?? tiposValidos[0])
+      : null;
 
     setGuardando(true);
     try {
-      await api.admin.editarPlato(plato.id, {
+      const updated = await api.admin.editarPlato(plato.id, {
         nombre:              form.nombre,
         precio:              precio.toFixed(2),
         categoriaInventario: form.categoriaInventario,
@@ -109,10 +113,9 @@ function EditModal({ plato, onClose, onSaved }: {
       });
       onSaved({
         ...plato,
-        nombre:              form.nombre,
-        precio:              precio.toFixed(2),
-        categoriaInventario: form.categoriaInventario,
-        tipoPlato,
+        ...updated,
+        stockActual:        plato.stockActual,
+        nombreUnidadMinima: plato.nombreUnidadMinima,
       });
       toast.success(`"${form.nombre}" actualizado`);
       onClose();
@@ -331,6 +334,7 @@ export default function AdminCatalogoPage() {
           onSaved={(updated) => {
             setPlatos((prev) => prev.map((p) => p.id === updated.id ? updated : p));
             setEditando(null);
+            fetchPlatos();
           }}
         />
       )}

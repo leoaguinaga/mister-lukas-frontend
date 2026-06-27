@@ -80,7 +80,7 @@ export const api = {
     crearPlato:         (data: { nombre: string; precio: string; categoriaInventario: string; tipoPlato?: string }) =>
       apiFetch('/platos', { method: 'POST', body: JSON.stringify(data) }),
     editarPlato:        (id: string, data: { nombre: string; precio: string; categoriaInventario: string; tipoPlato?: string | null }) =>
-      apiFetch(`/platos/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+      apiFetch<import('./types').PlatoCarta>(`/platos/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     toggleActivoPlato:  (id: string, activo: boolean) =>
       apiFetch(`/platos/${id}`, { method: 'PATCH', body: JSON.stringify({ activo }) }),
     getStock:           () => apiFetch<InsumoStock[]>('/admin/stock'),
