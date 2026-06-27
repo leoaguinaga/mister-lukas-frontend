@@ -114,7 +114,7 @@ export default function AdminTicketerasPage() {
 PRINTER_KITCHEN_PORT=9100
 PRINTER_RECEIPT_IP=192.168.1.101
 PRINTER_RECEIPT_PORT=9100
-PRINTER_MODE=real`}</pre>
+PRINTER_MODE=lan`}</pre>
         <p className="text-xs text-muted-foreground">
           Puerto estándar ESC/POS LAN: <strong>9100</strong>. Reiniciar el servidor tras cambiar las vars.
         </p>

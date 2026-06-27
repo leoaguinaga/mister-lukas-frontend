@@ -75,7 +75,11 @@ function EditModal({ plato, onClose, onSaved }: {
     nombre:              plato.nombre,
     precio:              plato.precio,
     categoriaInventario: plato.categoriaInventario,
-    tipoPlato:           plato.tipoPlato,
+    // Si el plato no tiene tipoPlato pero su categoría sí admite uno,
+    // pre-seleccionamos el primero válido. Sin esto, el <select> mostraría
+    // visualmente la primera opción pero el state quedaría en null, y al
+    // guardar el backend recibiría tipoPlato: null → la categoría no se actualiza.
+    tipoPlato:           plato.tipoPlato ?? defaultTipoPlato(plato.categoriaInventario),
   });
   const [guardando, setGuardando] = useState(false);
 
