@@ -27,6 +27,10 @@ export default function MesaPage() {
   const [marcando, setMarcando] = useState<string | null>(null);
   const [cartaAbierta, setCartaAbierta] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+  const [imprimiendo, setImprimiendo] = useState(false);
+  const [modalCobro, setModalCobro] = useState(false);
+  const [cobrandoPagos, setCobrandoPagos] = useState<Array<{ metodo: 'efectivo' | 'tarjeta' | 'yape_plin' | 'transferencia'; monto: string }>>([{ metodo: 'efectivo', monto: '' }]);
+  const [cobrando, setCobrando] = useState(false);
   const cartaRef = useRef<HTMLDivElement>(null);
 
   const platoMap = useMemo(() => new Map(menu.map((p) => [p.id, p])), [menu]);
@@ -148,6 +152,48 @@ export default function MesaPage() {
     (p) => p.estado !== 'cancelado' && p.estado !== 'entregado'
   ).length === 0;
 
+  // Mesa cerrable: sin rondas activas/pendientes (puede tener rondas entregadas)
+  const mesaCerrable = sinRondasActivas && (visita?.pedidos ?? []).some(
+    (p) => p.estado === 'entregado'
+  );
+
+  async function handleImprimirCuenta() {
+    if (!visita) return;
+    setImprimiendo(true);
+    try {
+      await api.visitas.imprimirCuenta(visita.id);
+      toast.success('Cuenta enviada a impresora');
+      setModalCobro(true);
+      // Inicializar con el total como monto por defecto
+      setCobrandoPagos([{ metodo: 'efectivo', monto: visita.total }]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al imprimir cuenta');
+    } finally {
+      setImprimiendo(false);
+    }
+  }
+
+  const totalCobrandoPagos = cobrandoPagos.reduce((s, p) => s + (parseFloat(p.monto) || 0), 0);
+
+  async function handleRegistrarPago() {
+    if (!visita) return;
+    const pagos = cobrandoPagos.filter((p) => parseFloat(p.monto) > 0);
+    if (!pagos.length) { toast.error('Ingresa al menos un método de pago'); return; }
+    setCobrando(true);
+    try {
+      await api.visitas.pagarMesero(
+        visita.id,
+        pagos.map((p) => ({ metodoPago: p.metodo, monto: parseFloat(p.monto) })),
+      );
+      toast.success('Cobro registrado — mesa liberada');
+      router.push('/mesero');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al registrar cobro');
+    } finally {
+      setCobrando(false);
+    }
+  }
+
   const TIPO_CARTA: Array<{ label: string; filter: (p: PlatoCarta) => boolean }> = [
     { label: 'Entradas',           filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'entradas' },
     { label: 'Platos a la carta',  filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'platos_a_la_carta' },
@@ -216,6 +262,83 @@ export default function MesaPage() {
         </div>
       )}
 
+      {/* Modal de cobro */}
+      {modalCobro && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50">
+          <div className="w-full max-w-sm bg-white rounded-t-2xl sm:rounded-2xl p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-[var(--carbon)]">Registrar cobro</h2>
+              <button onClick={() => setModalCobro(false)} className="text-muted-foreground hover:text-foreground text-xl leading-none">×</button>
+            </div>
+            <p className="text-sm text-muted-foreground">Total: <span className="font-bold text-[var(--carbon)]">S/{visita.total}</span></p>
+
+            <div className="space-y-3">
+              {cobrandoPagos.map((pago, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <select
+                    value={pago.metodo}
+                    onChange={(e) => {
+                      const next = [...cobrandoPagos];
+                      next[idx] = { ...next[idx], metodo: e.target.value as typeof pago.metodo };
+                      setCobrandoPagos(next);
+                    }}
+                    className="flex-1 text-sm rounded-lg border border-border px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[var(--terracota)]"
+                  >
+                    <option value="efectivo">Efectivo</option>
+                    <option value="tarjeta">Tarjeta</option>
+                    <option value="yape_plin">Yape / Plin</option>
+                    <option value="transferencia">Transferencia</option>
+                  </select>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="S/0.00"
+                    value={pago.monto}
+                    onChange={(e) => {
+                      const next = [...cobrandoPagos];
+                      next[idx] = { ...next[idx], monto: e.target.value };
+                      setCobrandoPagos(next);
+                    }}
+                    className="w-24 text-sm rounded-lg border border-border px-3 py-2 text-right focus:outline-none focus:ring-1 focus:ring-[var(--terracota)]"
+                  />
+                  {cobrandoPagos.length > 1 && (
+                    <button
+                      onClick={() => setCobrandoPagos(cobrandoPagos.filter((_, i) => i !== idx))}
+                      className="text-muted-foreground hover:text-[var(--terracota)] text-lg leading-none"
+                    >×</button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {cobrandoPagos.length < 3 && (
+              <button
+                onClick={() => setCobrandoPagos([...cobrandoPagos, { metodo: 'efectivo', monto: '' }])}
+                className="text-xs text-[var(--terracota)] hover:underline"
+              >
+                + Agregar método de pago
+              </button>
+            )}
+
+            {cobrandoPagos.length > 1 && (
+              <p className={['text-xs font-medium', Math.abs(totalCobrandoPagos - parseFloat(visita.total)) > 0.01 ? 'text-[var(--terracota)]' : 'text-[var(--salvia)]'].join(' ')}>
+                Total ingresado: S/{totalCobrandoPagos.toFixed(2)}
+                {Math.abs(totalCobrandoPagos - parseFloat(visita.total)) > 0.01 && ` (faltan S/${(parseFloat(visita.total) - totalCobrandoPagos).toFixed(2)})`}
+              </p>
+            )}
+
+            <Button
+              className="w-full h-12 text-base bg-[var(--terracota)] hover:bg-[#9e3726] text-white disabled:opacity-40"
+              disabled={cobrando || Math.abs(totalCobrandoPagos - parseFloat(visita.total)) > 0.01}
+              onClick={handleRegistrarPago}
+            >
+              {cobrando ? 'Registrando…' : 'Confirmar cobro'}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Banner para llevar */}
       {visita.paraLlevar && (
         <div className="flex items-center gap-2 px-5 py-2 bg-[var(--dorado)]/10 border-b border-[var(--dorado)]/30">
@@ -242,18 +365,39 @@ export default function MesaPage() {
               {cancelando ? 'Cerrando…' : 'Cancelar apertura'}
             </button>
           )}
+          {mesaCerrable && (
+            <button
+              onClick={handleCancelarApertura}
+              disabled={cancelando}
+              className="text-xs text-[var(--salvia)] hover:underline disabled:opacity-50"
+            >
+              {cancelando ? 'Cerrando…' : 'Cerrar mesa'}
+            </button>
+          )}
         </div>
         <div className="text-center">
           <p className="text-xs text-muted-foreground">Total visita</p>
           <p className="font-bold text-[var(--carbon)]">S/{visita.total}</p>
         </div>
-        <button
-          onClick={() => setCartaAbierta(true)}
-          className="flex flex-col items-center gap-0.5 text-muted-foreground hover:text-[var(--carbon)] transition-colors"
-        >
-          <span className="text-lg leading-none">📋</span>
-          <span className="text-xs">Carta</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {sinRondasActivas && visita.pedidos.some((p) => p.estado === 'entregado') && (
+            <button
+              onClick={handleImprimirCuenta}
+              disabled={imprimiendo}
+              className="flex flex-col items-center gap-0.5 text-[var(--terracota)] hover:opacity-80 transition-opacity disabled:opacity-40"
+            >
+              <span className="text-lg leading-none">🧾</span>
+              <span className="text-xs font-medium">{imprimiendo ? '…' : 'Cuenta'}</span>
+            </button>
+          )}
+          <button
+            onClick={() => setCartaAbierta(true)}
+            className="flex flex-col items-center gap-0.5 text-muted-foreground hover:text-[var(--carbon)] transition-colors"
+          >
+            <span className="text-lg leading-none">📋</span>
+            <span className="text-xs">Carta</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 overflow-hidden">

@@ -41,6 +41,13 @@ export const api = {
       }),
     cerrar: (visitaId: string) =>
       apiFetch(`/visits/${visitaId}/close`, { method: 'POST' }),
+    imprimirCuenta: (visitaId: string) =>
+      apiFetch<{ ok: boolean }>(`/visits/${visitaId}/print-bill`, { method: 'POST' }),
+    pagarMesero: (visitaId: string, pagos: Array<{ metodoPago: string; monto: number }>) =>
+      apiFetch<{ ok: boolean }>(`/visits/${visitaId}/pay-waiter`, {
+        method: 'POST',
+        body: JSON.stringify({ pagos }),
+      }),
     abrirParaLlevar: () =>
       apiFetch<{ id: string }>('/visits/llevar', { method: 'POST' }),
   },
