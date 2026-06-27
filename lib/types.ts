@@ -1,7 +1,9 @@
 export type EstadoMesa = 'libre' | 'ocupada';
 export type EstadoPedido = 'pendiente' | 'en_preparacion' | 'listo' | 'entregado' | 'cancelado';
 export type CategoriaInventario = 'fraccionable' | 'reventa' | 'multi_insumo';
-export type TipoPlato = 'entradas' | 'platos_a_la_carta' | 'parrillas' | 'parrillas_familiares' | 'pastas' | 'guarniciones';
+export type TipoPlato =
+  | 'entradas' | 'platos_a_la_carta' | 'parrillas' | 'parrillas_familiares' | 'pastas' | 'guarniciones'
+  | 'refresco' | 'bebida' | 'coctel';
 
 export interface Mesa {
   id: string;

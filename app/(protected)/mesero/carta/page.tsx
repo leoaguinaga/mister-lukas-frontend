@@ -12,8 +12,12 @@ const TIPO_LABEL: Record<TipoPlato, string> = {
   parrillas_familiares: 'Parrillas Familiares',
   pastas:               'Pastas',
   guarniciones:         'Guarniciones',
+  refresco:             'Refrescos',
+  bebida:               'Bebidas',
+  coctel:               'Cócteles',
 };
-const TIPOS_ORDEN: TipoPlato[] = ['entradas', 'platos_a_la_carta', 'parrillas', 'parrillas_familiares', 'pastas', 'guarniciones'];
+const TIPOS_PLATOS: TipoPlato[] = ['entradas', 'platos_a_la_carta', 'parrillas', 'parrillas_familiares', 'pastas', 'guarniciones'];
+const TIPOS_BEBIDAS: TipoPlato[] = ['refresco', 'bebida', 'coctel'];
 
 export default function CartaPage() {
   const [platos, setPlatos] = useState<PlatoCarta[]>([]);
@@ -95,7 +99,7 @@ export default function CartaPage() {
         <span className="text-xs text-muted-foreground">{platos.filter((p) => !p.disponible).length} sin stock</span>
       </div>
 
-      {TIPOS_ORDEN.map((tipo) => (
+      {TIPOS_PLATOS.map((tipo) => (
         <Section
           key={tipo}
           label={TIPO_LABEL[tipo]}
@@ -104,7 +108,15 @@ export default function CartaPage() {
       ))}
 
       <Section label="Pollo a la brasa" items={platos.filter((p) => p.categoriaInventario === 'fraccionable')} />
-      <Section label="Bebidas"          items={platos.filter((p) => p.categoriaInventario === 'reventa')} />
+
+      {TIPOS_BEBIDAS.map((tipo) => (
+        <Section
+          key={tipo}
+          label={TIPO_LABEL[tipo]}
+          items={platos.filter((p) => p.categoriaInventario === 'reventa' && p.tipoPlato === tipo)}
+        />
+      ))}
+      <Section label="Bebidas" items={platos.filter((p) => p.categoriaInventario === 'reventa' && !p.tipoPlato)} />
     </div>
   );
 }
