@@ -8,6 +8,8 @@ import { PlatoCarta, Visita } from '@/lib/types';
 import { RondaCard } from '@/components/mesero/RondaCard';
 import { CantidadControl } from '@/components/mesero/CantidadControl';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { CancelarRondaDialog } from '@/components/mesero/CancelarRondaDialog';
 
 interface LineaPedido {
   platoCartaId: string;
@@ -31,6 +33,10 @@ export default function MesaPage() {
   const [modalCobro, setModalCobro] = useState(false);
   const [cobrandoPagos, setCobrandoPagos] = useState<Array<{ metodo: 'efectivo' | 'tarjeta' | 'yape_plin' | 'transferencia'; monto: string }>>([{ metodo: 'efectivo', monto: '' }]);
   const [cobrando, setCobrando] = useState(false);
+  const [pedidoPorCancelar, setPedidoPorCancelar] = useState<string | null>(null);
+  const [confirmarLiberar, setConfirmarLiberar] = useState(false);
+  const [rondaParaLlevar, setRondaParaLlevar] = useState(false);
+  const [nombreClienteLlevar, setNombreClienteLlevar] = useState('');
   const cartaRef = useRef<HTMLDivElement>(null);
 
   const platoMap = useMemo(() => new Map(menu.map((p) => [p.id, p])), [menu]);
@@ -45,7 +51,7 @@ export default function MesaPage() {
   }, [visitaId]);
 
   useEffect(() => {
-    api.menu.list().then(setMenu).catch(() => {});
+    api.menu.list().then(setMenu).catch(() => { });
     fetchVisita();
     const interval = setInterval(fetchVisita, 5000);
     return () => clearInterval(interval);
@@ -69,12 +75,20 @@ export default function MesaPage() {
   const totalPedido = itemsParaEnviar.reduce((s, l) => {
     const plato = platoMap.get(l.platoCartaId);
     const precio = parseFloat(plato?.precio ?? '0');
-    const recargo = visita?.paraLlevar && plato?.categoriaInventario !== 'reventa' ? 1 : 0;
-    return s + (precio + recargo) * l.cantidad;
+    return s + precio * l.cantidad;
   }, 0);
+
+  // Validación para envío: si la ronda es para llevar, exige nombre del cliente.
+  const nombreClienteLimpio = nombreClienteLlevar.trim();
+  const puedeEnviar =
+    itemsParaEnviar.length > 0 && !enviando && (!rondaParaLlevar || nombreClienteLimpio.length > 0);
 
   async function handleEnviarPedido() {
     if (itemsParaEnviar.length === 0) return;
+    if (rondaParaLlevar && !nombreClienteLimpio) {
+      toast.error('Ingresa el nombre del cliente para llevar');
+      return;
+    }
     setEnviando(true);
     try {
       await api.visitas.crearPedido(
@@ -84,9 +98,14 @@ export default function MesaPage() {
           cantidad: l.cantidad,
           notas: l.notas || undefined,
         })),
+        rondaParaLlevar
+          ? { paraLlevar: true, nombreClienteLlevar: nombreClienteLimpio }
+          : {},
       );
-      toast.success('Pedido enviado a cocina');
+      toast.success(rondaParaLlevar ? 'Pedido para llevar enviado' : 'Pedido enviado a cocina');
       setLineas(new Map());
+      setRondaParaLlevar(false);
+      setNombreClienteLlevar('');
       fetchVisita();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al enviar pedido');
@@ -95,25 +114,14 @@ export default function MesaPage() {
     }
   }
 
-  async function handleMarcarEntregado(pedidoId: string) {
+  async function confirmarCancelarRonda(motivo: string) {
+    if (!pedidoPorCancelar) return;
+    const pedidoId = pedidoPorCancelar;
     setMarcando(pedidoId);
     try {
-      await api.pedidos.cambiarEstado(pedidoId, 'entregado');
-      toast.success('Entregado');
-      fetchVisita();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error');
-    } finally {
-      setMarcando(null);
-    }
-  }
-
-  async function handleCancelar(pedidoId: string) {
-    if (!confirm('¿Cancelar esta ronda? Se restaurará el stock.')) return;
-    setMarcando(pedidoId);
-    try {
-      await api.pedidos.cambiarEstado(pedidoId, 'cancelado');
+      await api.pedidos.cambiarEstado(pedidoId, 'cancelado', { motivoCancelacion: motivo });
       toast.success('Ronda cancelada');
+      setPedidoPorCancelar(null);
       fetchVisita();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
@@ -122,17 +130,18 @@ export default function MesaPage() {
     }
   }
 
-  async function handleCancelarApertura() {
+  async function ejecutarLiberarMesa() {
     if (!visita) return;
     setCancelando(true);
     try {
       await api.visitas.cerrar(visita.id);
-      toast.success('Mesa cerrada');
+      toast.success(visita.paraLlevar ? 'Pedido cerrado' : 'Mesa liberada');
       router.push('/mesero');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al cerrar');
+      toast.error(err instanceof Error ? err.message : 'Error al liberar');
     } finally {
       setCancelando(false);
+      setConfirmarLiberar(false);
     }
   }
 
@@ -148,14 +157,23 @@ export default function MesaPage() {
     }
   }
 
-  const sinRondasActivas = (visita?.pedidos ?? []).filter(
-    (p) => p.estado !== 'cancelado' && p.estado !== 'entregado'
-  ).length === 0;
+  // Consumo total pendiente de cobro (lo que no fue cancelado)
+  const consumoPendiente = (visita?.pedidos ?? [])
+    .filter((p) => p.estado !== 'cancelado')
+    .reduce(
+      (s, p) =>
+        s +
+        p.items.reduce(
+          (acc, i) => acc + parseFloat(i.precioUnitarioCongelado) * i.cantidad,
+          0,
+        ),
+      0,
+    );
 
-  // Mesa cerrable: sin rondas activas/pendientes (puede tener rondas entregadas)
-  const mesaCerrable = sinRondasActivas && (visita?.pedidos ?? []).some(
-    (p) => p.estado === 'entregado'
-  );
+  // Mesa liberable sin pago si no hay consumo (sin rondas o todas canceladas).
+  const mesaLiberableSinPago = consumoPendiente === 0;
+  // Hay consumo pendiente → se debe cobrar antes de liberar.
+  const tieneConsumoNoCobrado = consumoPendiente > 0;
 
   async function handleImprimirCuenta() {
     if (!visita) return;
@@ -195,21 +213,32 @@ export default function MesaPage() {
   }
 
   const TIPO_CARTA: Array<{ label: string; filter: (p: PlatoCarta) => boolean }> = [
-    { label: 'Entradas',           filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'entradas' },
-    { label: 'Platos a la carta',  filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'platos_a_la_carta' },
-    { label: 'Parrillas',          filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'parrillas' },
-    { label: 'Parrillas Familiares', filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'parrillas_familiares' },
-    { label: 'Pastas',             filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'pastas' },
-    { label: 'Guarniciones',       filter: (p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === 'guarniciones' },
-    { label: 'Pollo a la brasa',   filter: (p) => p.categoriaInventario === 'fraccionable' },
-    { label: 'Bebidas',            filter: (p) => p.categoriaInventario === 'reventa' },
+    { label: 'Entradas', filter: (p) => p.categoria === 'entradas' },
+    { label: 'Platos a la carta', filter: (p) => p.categoria === 'platos_a_la_carta' },
+    { label: 'Parrillas', filter: (p) => p.categoria === 'parrillas' },
+    { label: 'Parrillas Familiares', filter: (p) => p.categoria === 'parrillas_familiares' },
+    { label: 'Pastas', filter: (p) => p.categoria === 'pastas' },
+    { label: 'Guarniciones', filter: (p) => p.categoria === 'guarniciones' },
+    { label: 'Pollo a la brasa', filter: (p) => p.categoria === 'pollo_a_la_brasa' },
+    { label: 'Refrescos o Jugos', filter: (p) => p.categoria === 'refrescos_jugos' },
+    { label: 'Bebidas', filter: (p) => p.categoria === 'bebidas' },
+    { label: 'Cócteles', filter: (p) => p.categoria === 'cocteles' },
+    { label: 'Extras', filter: (p) => p.categoria === 'extras' },
   ];
 
   // Agrupar menu por categoría para mostrar
   const categorias: Array<{ label: string; key: string }> = [
-    { label: 'Pollo a la brasa', key: 'fraccionable' },
-    { label: 'Bebidas', key: 'reventa' },
-    { label: 'Extras', key: 'multi_insumo' },
+    { label: 'Pollo a la brasa', key: 'pollo_a_la_brasa' },
+    { label: 'Bebidas', key: 'bebidas' },
+    { label: 'Refrescos o Jugos', key: 'refrescos_jugos' },
+    { label: 'Cócteles', key: 'cocteles' },
+    { label: 'Entradas', key: 'entradas' },
+    { label: 'Platos a la carta', key: 'platos_a_la_carta' },
+    { label: 'Parrillas', key: 'parrillas' },
+    { label: 'Parrillas Familiares', key: 'parrillas_familiares' },
+    { label: 'Pastas', key: 'pastas' },
+    { label: 'Guarniciones', key: 'guarniciones' },
+    { label: 'Extras', key: 'extras' },
   ];
 
   if (!visita) {
@@ -248,9 +277,7 @@ export default function MesaPage() {
                       <div key={p.id} className="flex items-center justify-between px-4 py-3">
                         <p className="font-medium text-sm text-[var(--carbon)]">{p.nombre}</p>
                         <p className="text-sm font-semibold text-[var(--carbon)]">
-                          S/{visita.paraLlevar && p.categoriaInventario !== 'reventa'
-                            ? (parseFloat(p.precio) + 1).toFixed(2)
-                            : p.precio}
+                          S/{p.precio}
                         </p>
                       </div>
                     ))}
@@ -339,48 +366,30 @@ export default function MesaPage() {
         </div>
       )}
 
-      {/* Banner para llevar */}
+      {/* Banner: visita marcada como "para llevar" (mesa virtual) */}
       {visita.paraLlevar && (
         <div className="flex items-center gap-2 px-5 py-2 bg-[var(--dorado)]/10 border-b border-[var(--dorado)]/30">
           <span className="text-base leading-none">🥡</span>
-          <span className="text-xs font-semibold text-[var(--dorado)]">Para llevar · +S/1.00 por plato</span>
+          <span className="text-xs font-semibold text-[var(--dorado)]">
+            Pedido para llevar {visita.nombreCliente ? `— ${visita.nombreCliente}` : ''}
+          </span>
         </div>
       )}
 
       {/* Sub-header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-white">
-        <div className="flex flex-col items-start gap-0.5">
-          <button
-            onClick={() => router.push('/mesero')}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            ← Mesas
-          </button>
-          {sinRondasActivas && visita.pedidos.length === 0 && (
-            <button
-              onClick={handleCancelarApertura}
-              disabled={cancelando}
-              className="text-xs text-[var(--terracota)] hover:underline disabled:opacity-50"
-            >
-              {cancelando ? 'Cerrando…' : 'Cancelar apertura'}
-            </button>
-          )}
-          {mesaCerrable && (
-            <button
-              onClick={handleCancelarApertura}
-              disabled={cancelando}
-              className="text-xs text-[var(--salvia)] hover:underline disabled:opacity-50"
-            >
-              {cancelando ? 'Cerrando…' : 'Cerrar mesa'}
-            </button>
-          )}
-        </div>
+        <button
+          onClick={() => router.push('/mesero')}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          ← Mesas
+        </button>
         <div className="text-center">
           <p className="text-xs text-muted-foreground">Total visita</p>
           <p className="font-bold text-[var(--carbon)]">S/{visita.total}</p>
         </div>
         <div className="flex items-center gap-3">
-          {sinRondasActivas && visita.pedidos.some((p) => p.estado === 'entregado') && (
+          {/* {tieneConsumoNoCobrado && (
             <button
               onClick={handleImprimirCuenta}
               disabled={imprimiendo}
@@ -389,14 +398,19 @@ export default function MesaPage() {
               <span className="text-lg leading-none">🧾</span>
               <span className="text-xs font-medium">{imprimiendo ? '…' : 'Cuenta'}</span>
             </button>
-          )}
-          <button
-            onClick={() => setCartaAbierta(true)}
-            className="flex flex-col items-center gap-0.5 text-muted-foreground hover:text-[var(--carbon)] transition-colors"
+          )} */}
+          <Button
+            onClick={() => setConfirmarLiberar(true)}
+            disabled={!mesaLiberableSinPago || cancelando}
+            title={
+              !mesaLiberableSinPago
+                ? 'Hay consumo pendiente. Debe cobrarse en caja antes de liberar.'
+                : undefined
+            }
+            className="bg-[var(--salvia)] hover:bg-[#7a8a4e] text-white disabled:opacity-40"
           >
-            <span className="text-lg leading-none">📋</span>
-            <span className="text-xs">Carta</span>
-          </button>
+            {cancelando ? 'Liberando…' : 'Liberar mesa'}
+          </Button>
         </div>
       </div>
 
@@ -406,7 +420,7 @@ export default function MesaPage() {
         <div className="flex flex-col border-r border-border overflow-hidden">
           <div className="flex-1 overflow-y-auto p-4 space-y-5">
             {categorias.map(({ label, key }) => {
-              const platos = menu.filter((p) => p.categoriaInventario === key);
+              const platos = menu.filter((p) => p.categoria === key);
               if (platos.length === 0) return null;
               return (
                 <section key={key}>
@@ -431,11 +445,9 @@ export default function MesaPage() {
                               </p>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs text-muted-foreground">
-                                  S/{visita.paraLlevar && plato.categoriaInventario !== 'reventa'
-                                    ? (parseFloat(plato.precio) + 1).toFixed(2)
-                                    : plato.precio}
+                                  S/{plato.precio}
                                 </span>
-                                {plato.categoriaInventario !== 'multi_insumo' && plato.stockActual !== null && (
+                                {plato.categoria === 'bebidas' && plato.stockActual !== null && (
                                   <span className={[
                                     'text-xs font-medium',
                                     plato.stockActual <= 0 ? 'text-[var(--terracota)]' : 'text-[var(--salvia)]',
@@ -477,11 +489,42 @@ export default function MesaPage() {
             })}
           </div>
 
-          {/* Botón enviar — sticky */}
-          <div className="p-4 border-t border-border bg-white">
+          {/* Toggle "para llevar" + botón enviar — sticky */}
+          <div className="p-4 border-t border-border bg-white space-y-3">
+            {/* No mostrar toggle en visita ya marcada como "para llevar" entera */}
+            {!visita.paraLlevar && (
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rondaParaLlevar}
+                    onChange={(e) => {
+                      setRondaParaLlevar(e.target.checked);
+                      if (!e.target.checked) setNombreClienteLlevar('');
+                    }}
+                    className="h-4 w-4 accent-[var(--dorado)]"
+                  />
+                  <span className="text-sm font-medium text-[var(--carbon)]">
+                    🥡 Esta ronda es para llevar
+                  </span>
+                </label>
+                {rondaParaLlevar && (
+                  <input
+                    type="text"
+                    value={nombreClienteLlevar}
+                    onChange={(e) => setNombreClienteLlevar(e.target.value)}
+                    placeholder="Nombre del cliente (obligatorio)"
+                    className="w-full text-sm px-3 py-2 rounded-lg border border-[var(--dorado)]/40 bg-[var(--dorado)]/5 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[var(--dorado)]"
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Si necesitas cobrar un tupper o bolsa, agrégalo desde la sección <span className="font-medium">Extras</span>.
+                </p>
+              </div>
+            )}
             <Button
               className="w-full h-12 text-base bg-[var(--terracota)] hover:bg-[#9e3726] text-white disabled:opacity-40"
-              disabled={itemsParaEnviar.length === 0 || enviando}
+              disabled={!puedeEnviar}
               onClick={handleEnviarPedido}
             >
               {enviando
@@ -519,8 +562,7 @@ export default function MesaPage() {
                     key={pedido.id}
                     pedido={pedido}
                     platoMap={platoMap}
-                    onMarcarEntregado={handleMarcarEntregado}
-                    onCancelar={handleCancelar}
+                    onCancelar={(id) => setPedidoPorCancelar(id)}
                     cargando={marcando === pedido.id}
                   />
                 ))
@@ -528,6 +570,27 @@ export default function MesaPage() {
           </div>
         </div>
       </div>
+
+      <CancelarRondaDialog
+        open={!!pedidoPorCancelar}
+        loading={!!marcando}
+        onConfirm={confirmarCancelarRonda}
+        onCancel={() => setPedidoPorCancelar(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmarLiberar}
+        title={visita.paraLlevar ? 'Cerrar pedido para llevar' : 'Liberar mesa'}
+        description={
+          visita.paraLlevar
+            ? 'El pedido quedará cerrado y no podrá agregarse más a esta visita.'
+            : 'La mesa quedará libre para recibir nuevos clientes.'
+        }
+        confirmLabel={visita.paraLlevar ? 'Cerrar pedido' : 'Liberar mesa'}
+        loading={cancelando}
+        onConfirm={ejecutarLiberarMesa}
+        onCancel={() => setConfirmarLiberar(false)}
+      />
     </div>
   );
 }

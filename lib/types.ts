@@ -1,23 +1,32 @@
 export type EstadoMesa = 'libre' | 'ocupada';
 export type EstadoPedido = 'pendiente' | 'en_preparacion' | 'listo' | 'entregado' | 'cancelado';
-export type CategoriaInventario = 'fraccionable' | 'reventa' | 'multi_insumo';
-export type TipoPlato =
-  | 'entradas' | 'platos_a_la_carta' | 'parrillas' | 'parrillas_familiares' | 'pastas' | 'guarniciones'
-  | 'refresco' | 'bebida' | 'coctel';
+export type CategoriaProducto =
+  | 'pollo_a_la_brasa'
+  | 'entradas'
+  | 'platos_a_la_carta'
+  | 'parrillas'
+  | 'parrillas_familiares'
+  | 'pastas'
+  | 'guarniciones'
+  | 'refrescos_jugos'
+  | 'bebidas'
+  | 'cocteles'
+  | 'extras';
 
 export interface Mesa {
   id: string;
   numero: number;
   estado: EstadoMesa;
   capacidad: number | null;
+  filaPosicion: number | null;
+  colPosicion: number | null;
 }
 
 export interface PlatoCarta {
   id: string;
   nombre: string;
   precio: string;
-  categoriaInventario: CategoriaInventario;
-  tipoPlato: TipoPlato | null;
+  categoria: CategoriaProducto;
   disponible: boolean;
   activo: boolean;
   descripcion: string | null;
@@ -73,7 +82,11 @@ export interface UpsertPromocion {
 export interface Pedido {
   id: string;
   visitaMesaId: string;
+  numeroCorto: number;
   estado: EstadoPedido;
+  paraLlevar: boolean;
+  nombreClienteLlevar: string | null;
+  motivoCancelacion: string | null;
   fechaCreacion: string;
   fechaListo: string | null;
   fechaEntregado: string | null;
@@ -82,11 +95,17 @@ export interface Pedido {
 
 export interface Visita {
   id: string;
-  mesaId: string;
+  mesaId: string | null;
   estado: 'abierta' | 'cerrada';
+  tipo: 'mesa' | 'llevar' | 'delivery';
   paraLlevar: boolean;
+  nombreCliente: string | null;
+  telefonoCliente: string | null;
+  direccionDelivery: string | null;
+  costoEnvio: string | null;
   fechaApertura: string;
   fechaCierre: string | null;
   pedidos: Pedido[];
   total: string;
 }
+

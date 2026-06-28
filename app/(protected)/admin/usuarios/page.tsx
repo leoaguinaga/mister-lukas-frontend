@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { api, UsuarioAdmin } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { Plus } from 'lucide-react';
 
 const ROL_LABEL: Record<string, string> = {
   administracion: 'Admin',
@@ -23,6 +24,7 @@ export default function AdminUsuariosPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'mesero' });
   const [guardando, setGuardando] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [formAbierto, setFormAbierto] = useState(false);
 
   const fetchUsuarios = useCallback(async () => {
     try {
@@ -41,6 +43,7 @@ export default function AdminUsuariosPage() {
       await api.admin.crearUsuario(form);
       toast.success(`${form.name} creado`);
       setForm({ name: '', email: '', password: '', role: 'mesero' });
+      setFormAbierto(false);
       fetchUsuarios();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
@@ -62,10 +65,67 @@ export default function AdminUsuariosPage() {
 
   return (
     <div className="p-5 space-y-6 max-w-2xl mx-auto">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-xl font-semibold text-[var(--carbon)]">Staff</h2>
-        <span className="text-sm text-muted-foreground">{usuarios.length} usuarios</span>
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-[var(--carbon)]">Staff</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">{usuarios.length} usuarios</p>
+        </div>
+        <Button
+          onClick={() => setFormAbierto((v) => !v)}
+          className="bg-[var(--dorado)] hover:bg-[#c49238] text-[var(--carbon)] font-semibold"
+        >
+          <Plus size={15} className="mr-1" /> {formAbierto ? 'Cerrar' : 'Nuevo usuario'}
+        </Button>
       </div>
+
+      {/* Formulario nuevo usuario (colapsable) */}
+      {formAbierto && (
+        <div className="rounded-2xl border border-border bg-white p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Nombre</label>
+              <input
+                type="text" placeholder="Ana García" autoFocus
+                value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)]"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Rol</label>
+              <select
+                value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
+                className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)] bg-white"
+              >
+                <option value="mesero">Mesero</option>
+                <option value="cajero">Cajero</option>
+                <option value="administracion">Administración</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Email</label>
+              <input
+                type="email" placeholder="ana@misterluka.local"
+                value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+                className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)]"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Contraseña</label>
+              <input
+                type="password" placeholder="mínimo 8 caracteres"
+                value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)]"
+              />
+            </div>
+          </div>
+          <Button
+            className="w-full bg-[var(--dorado)] hover:bg-[#c49238] text-[var(--carbon)] font-semibold"
+            onClick={handleCrear} disabled={guardando}
+          >
+            {guardando ? 'Creando…' : 'Crear usuario'}
+          </Button>
+        </div>
+      )}
 
       {/* Lista */}
       <div className="rounded-2xl border border-border bg-white overflow-hidden divide-y divide-border">
@@ -98,53 +158,6 @@ export default function AdminUsuariosPage() {
         ))}
       </div>
 
-      {/* Formulario nuevo usuario */}
-      <div className="rounded-2xl border border-border bg-white p-5 space-y-4">
-        <p className="text-sm font-semibold text-[var(--carbon)]">Nuevo usuario</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Nombre</label>
-            <input
-              type="text" placeholder="Ana García"
-              value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)]"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Rol</label>
-            <select
-              value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)] bg-white"
-            >
-              <option value="mesero">Mesero</option>
-              <option value="cajero">Cajero</option>
-              <option value="administracion">Administración</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Email</label>
-            <input
-              type="email" placeholder="ana@misterluka.local"
-              value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)]"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Contraseña</label>
-            <input
-              type="password" placeholder="mínimo 8 caracteres"
-              value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)]"
-            />
-          </div>
-        </div>
-        <Button
-          className="w-full bg-[var(--dorado)] hover:bg-[#c49238] text-[var(--carbon)] font-semibold"
-          onClick={handleCrear} disabled={guardando}
-        >
-          {guardando ? 'Creando…' : 'Crear usuario'}
-        </Button>
-      </div>
     </div>
   );
 }

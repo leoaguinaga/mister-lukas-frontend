@@ -3,26 +3,43 @@
 import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
-import { PlatoCarta, TipoPlato } from '@/lib/types';
+import { PlatoCarta, CategoriaProducto } from '@/lib/types';
+import { Search } from 'lucide-react';
 
-const TIPO_LABEL: Record<TipoPlato, string> = {
+const CATEGORIA_LABEL: Record<CategoriaProducto, string> = {
+  pollo_a_la_brasa:     'Pollo a la brasa',
   entradas:             'Entradas',
   platos_a_la_carta:    'Platos a la carta',
   parrillas:            'Parrillas',
   parrillas_familiares: 'Parrillas Familiares',
   pastas:               'Pastas',
   guarniciones:         'Guarniciones',
-  refresco:             'Refrescos',
-  bebida:               'Bebidas',
-  coctel:               'Cócteles',
+  refrescos_jugos:      'Refrescos o Jugos',
+  bebidas:              'Bebidas',
+  cocteles:             'Cócteles',
+  extras:               'Extras',
 };
-const TIPOS_PLATOS: TipoPlato[] = ['entradas', 'platos_a_la_carta', 'parrillas', 'parrillas_familiares', 'pastas', 'guarniciones'];
-const TIPOS_BEBIDAS: TipoPlato[] = ['refresco', 'bebida', 'coctel'];
+
+const CATEGORIAS_ORDEN: CategoriaProducto[] = [
+  'pollo_a_la_brasa',
+  'entradas',
+  'platos_a_la_carta',
+  'parrillas',
+  'parrillas_familiares',
+  'pastas',
+  'guarniciones',
+  'refrescos_jugos',
+  'bebidas',
+  'cocteles',
+  'extras',
+];
 
 export default function CartaPage() {
   const [platos, setPlatos] = useState<PlatoCarta[]>([]);
   const [cargando, setCargando] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroCat, setFiltroCat] = useState<'todas' | CategoriaProducto>('todas');
 
   const fetchPlatos = useCallback(async () => {
     try {
@@ -60,7 +77,7 @@ export default function CartaPage() {
         </p>
         <div className="flex items-center gap-3 mt-0.5">
           <span className="text-xs text-muted-foreground">S/{plato.precio}</span>
-          {plato.categoriaInventario !== 'multi_insumo' && plato.stockActual !== null && (
+          {plato.categoria === 'bebidas' && plato.stockActual !== null && (
             <span className={['text-xs font-medium', plato.stockActual <= 0 ? 'text-[var(--terracota)]' : 'text-[var(--salvia)]'].join(' ')}>
               {plato.stockActual <= 0 ? 'Agotado' : `${plato.stockActual} ${plato.nombreUnidadMinima ?? ''}`}
             </span>
@@ -92,31 +109,56 @@ export default function CartaPage() {
     );
   };
 
+  const q = busqueda.trim().toLowerCase();
+  const platosFiltrados = platos.filter((p) => {
+    if (filtroCat !== 'todas' && p.categoria !== filtroCat) return false;
+    if (q && !p.nombre.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
   return (
-    <div className="p-5 space-y-6">
+    <div className="p-5 space-y-4">
       <div className="flex items-baseline justify-between">
         <h2 className="text-xl font-semibold text-[var(--carbon)]">Carta</h2>
         <span className="text-xs text-muted-foreground">{platos.filter((p) => !p.disponible).length} sin stock</span>
       </div>
 
-      {TIPOS_PLATOS.map((tipo) => (
-        <Section
-          key={tipo}
-          label={TIPO_LABEL[tipo]}
-          items={platos.filter((p) => p.categoriaInventario === 'multi_insumo' && p.tipoPlato === tipo)}
-        />
-      ))}
+      <div className="flex items-center gap-2 sticky top-0 z-10 bg-[var(--crema)] py-2">
+        <div className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Buscar plato…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="w-full h-10 pl-9 pr-3 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)]"
+          />
+        </div>
+        <select
+          value={filtroCat}
+          onChange={(e) => setFiltroCat(e.target.value as typeof filtroCat)}
+          className="h-10 px-3 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)]"
+        >
+          <option value="todas">Todas</option>
+          {CATEGORIAS_ORDEN.map((cat) => (
+            <option key={cat} value={cat}>{CATEGORIA_LABEL[cat]}</option>
+          ))}
+        </select>
+      </div>
 
-      <Section label="Pollo a la brasa" items={platos.filter((p) => p.categoriaInventario === 'fraccionable')} />
-
-      {TIPOS_BEBIDAS.map((tipo) => (
-        <Section
-          key={tipo}
-          label={TIPO_LABEL[tipo]}
-          items={platos.filter((p) => p.categoriaInventario === 'reventa' && p.tipoPlato === tipo)}
-        />
-      ))}
-      <Section label="Bebidas" items={platos.filter((p) => p.categoriaInventario === 'reventa' && !p.tipoPlato)} />
+      {platosFiltrados.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">Ningún plato coincide con la búsqueda.</p>
+      ) : (
+        <div className="space-y-6">
+          {CATEGORIAS_ORDEN.map((cat) => (
+            <Section
+              key={cat}
+              label={CATEGORIA_LABEL[cat]}
+              items={platosFiltrados.filter((p) => p.categoria === cat)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

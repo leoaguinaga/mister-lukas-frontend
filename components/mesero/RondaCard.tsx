@@ -2,19 +2,17 @@
 
 import { Pedido, PlatoCarta } from '@/lib/types';
 import { EstadoBadge } from './EstadoBadge';
-import { Button } from '@/components/ui/button';
 
 interface Props {
   pedido: Pedido;
   platoMap: Map<string, PlatoCarta>;
-  onMarcarEntregado: (pedidoId: string) => void;
   onCancelar: (pedidoId: string) => void;
   cargando?: boolean;
 }
 
 const ESTADOS_ACTIVOS = ['pendiente', 'en_preparacion', 'listo'];
 
-export function RondaCard({ pedido, platoMap, onMarcarEntregado, onCancelar, cargando }: Props) {
+export function RondaCard({ pedido, platoMap, onCancelar, cargando }: Props) {
   const hora = new Date(pedido.fechaCreacion).toLocaleTimeString('es-PE', {
     hour: '2-digit',
     minute: '2-digit',
@@ -27,6 +25,7 @@ export function RondaCard({ pedido, platoMap, onMarcarEntregado, onCancelar, car
   );
 
   const activo = ESTADOS_ACTIVOS.includes(pedido.estado);
+  const codigoRonda = `R-${String(pedido.numeroCorto).padStart(4, '0')}`;
 
   return (
     <div className={[
@@ -34,14 +33,35 @@ export function RondaCard({ pedido, platoMap, onMarcarEntregado, onCancelar, car
       !activo ? 'opacity-60' : '',
     ].join(' ')}>
       <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">Ronda · {hora}</span>
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-sm font-semibold text-[var(--carbon)]">{codigoRonda}</span>
+          <span className="text-xs text-muted-foreground">· {hora}</span>
+        </div>
         <EstadoBadge estado={pedido.estado} />
       </div>
+
+      {pedido.paraLlevar && (
+        <div className="flex items-center gap-2 rounded-lg bg-[var(--dorado)]/10 px-3 py-1.5 border border-[var(--dorado)]/30">
+          <span className="text-base leading-none">🥡</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-[var(--dorado)] uppercase tracking-wide">Para llevar</p>
+            {pedido.nombreClienteLlevar && (
+              <p className="text-sm font-medium text-[var(--carbon)] truncate">{pedido.nombreClienteLlevar}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {pedido.estado === 'cancelado' && pedido.motivoCancelacion && (
+        <p className="text-xs text-muted-foreground italic">
+          Motivo: {pedido.motivoCancelacion}
+        </p>
+      )}
 
       <ul className="space-y-1.5">
         {pedido.items.map((item) => {
           const plato = platoMap.get(item.platoCartaId);
-          const tachado = pedido.estado === 'entregado' || pedido.estado === 'cancelado';
+          const tachado = pedido.estado === 'cancelado';
           return (
             <li key={item.id} className={tachado ? 'opacity-50 line-through' : ''}>
               <span className="font-medium">{item.cantidad}×</span>{' '}
@@ -58,23 +78,13 @@ export function RondaCard({ pedido, platoMap, onMarcarEntregado, onCancelar, car
         <span className="text-sm text-muted-foreground">S/{subtotal.toFixed(2)}</span>
 
         {activo && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onCancelar(pedido.id)}
-              disabled={cargando}
-              className="text-xs text-muted-foreground hover:text-[var(--terracota)] underline transition-colors disabled:opacity-40"
-            >
-              Cancelar
-            </button>
-            <Button
-              size="sm"
-              onClick={() => onMarcarEntregado(pedido.id)}
-              disabled={cargando}
-              className="bg-[var(--salvia)] hover:bg-[#7a8a4e] text-white"
-            >
-              {cargando ? '…' : 'Entregar'}
-            </Button>
-          </div>
+          <button
+            onClick={() => onCancelar(pedido.id)}
+            disabled={cargando}
+            className="text-xs text-muted-foreground hover:text-[var(--terracota)] underline transition-colors disabled:opacity-40"
+          >
+            {cargando ? '…' : 'Cancelar ronda'}
+          </button>
         )}
       </div>
     </div>

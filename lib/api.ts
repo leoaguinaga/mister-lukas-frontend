@@ -20,6 +20,13 @@ export const api = {
       apiFetch<{ id: string }>(`/tables/${mesaId}/open`, { method: 'POST' }),
     visitaActiva: (mesaId: string) =>
       apiFetch<{ id: string }>(`/tables/${mesaId}/active-visit`),
+    actualizarLayout: (
+      posiciones: Array<{ id: string; filaPosicion: number | null; colPosicion: number | null }>,
+    ) =>
+      apiFetch<{ ok: boolean; actualizadas: number }>('/tables/layout', {
+        method: 'POST',
+        body: JSON.stringify({ posiciones }),
+      }),
   },
   menu: {
     list: () => apiFetch<import('./types').PlatoCarta[]>('/menu'),
@@ -34,10 +41,11 @@ export const api = {
     crearPedido: (
       visitaId: string,
       items: Array<{ platoCartaId: string; cantidad: number; notas?: string }>,
+      opciones: { paraLlevar?: boolean; nombreClienteLlevar?: string } = {},
     ) =>
       apiFetch<import('./types').Pedido>(`/visits/${visitaId}/orders`, {
         method: 'POST',
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, ...opciones }),
       }),
     cerrar: (visitaId: string) =>
       apiFetch(`/visits/${visitaId}/close`, { method: 'POST' }),
@@ -48,14 +56,17 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ pagos }),
       }),
-    abrirParaLlevar: () =>
-      apiFetch<{ id: string }>('/visits/llevar', { method: 'POST' }),
+    abrirParaLlevar: (data?: { nombreCliente?: string }) =>
+      apiFetch<{ id: string }>('/visits/llevar', {
+        method: 'POST',
+        body: data ? JSON.stringify(data) : undefined,
+      }),
   },
   pedidos: {
-    cambiarEstado: (pedidoId: string, estado: string) =>
+    cambiarEstado: (pedidoId: string, estado: string, opciones: { motivoCancelacion?: string } = {}) =>
       apiFetch<import('./types').Pedido>(`/orders/${pedidoId}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ estado }),
+        body: JSON.stringify({ estado, ...opciones }),
       }),
   },
   monitor: {
@@ -77,9 +88,14 @@ export const api = {
       apiFetch('/tables', { method: 'POST', body: JSON.stringify({ numero, capacidad }) }),
     eliminarMesa:       (id: string) =>
       apiFetch(`/tables/${id}`, { method: 'DELETE' }),
-    crearPlato:         (data: { nombre: string; precio: string; categoriaInventario: string; tipoPlato?: string }) =>
+    crearPlato:         (data: { nombre: string; precio: string; categoria: string }) =>
       apiFetch('/platos', { method: 'POST', body: JSON.stringify(data) }),
-    editarPlato:        (id: string, data: { nombre: string; precio: string; categoriaInventario: string; tipoPlato?: string | null }) =>
+    crearPlatosBulk:    (data: {
+      categoria: string;
+      platos: Array<{ nombre: string; precio: string; descripcion?: string }>;
+    }) =>
+      apiFetch<import('./types').PlatoCarta[]>('/platos/bulk', { method: 'POST', body: JSON.stringify(data) }),
+    editarPlato:        (id: string, data: { nombre: string; precio: string; categoria: string }) =>
       apiFetch<import('./types').PlatoCarta>(`/platos/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     toggleActivoPlato:  (id: string, activo: boolean) =>
       apiFetch(`/platos/${id}`, { method: 'PATCH', body: JSON.stringify({ activo }) }),
@@ -111,10 +127,37 @@ export const api = {
       apiFetch<TurnoCaja>('/cash/shift/close', { method: 'POST', body: JSON.stringify({ montoCierreReal }) }),
     visitasParaCobrar: () => apiFetch<VisitaResumen[]>('/cash/visits-to-collect'),
     detalleVisita: (visitaId: string) => apiFetch<DetalleVisitaCaja>(`/cash/visits/${visitaId}`),
-    registrarPago: (visitaId: string, pagos: Array<{ metodoPago: string; monto: number }>) =>
+    registrarPago: (
+      visitaId: string,
+      pagos: Array<{ metodoPago: string; monto: number }>,
+      ajuste?: { monto: number; motivo: string },
+    ) =>
       apiFetch(`/cash/visits/${visitaId}/pay`, {
         method: 'POST',
-        body: JSON.stringify({ pagos }),
+        body: JSON.stringify({ pagos, ...(ajuste ? { ajuste } : {}) }),
+      }),
+    imprimirPrecuenta: (visitaId: string) =>
+      apiFetch<{ ok: boolean; total: string }>(`/cash/visits/${visitaId}/print-precuenta`, {
+        method: 'POST',
+      }),
+    crearPedidoLlevar: (data: {
+      nombreCliente: string;
+      items: Array<{ platoCartaId: string; cantidad: number; notas?: string }>;
+    }) =>
+      apiFetch<{ ok: boolean; visitaId: string }>('/cash/pedidos/llevar', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    crearPedidoDelivery: (data: {
+      nombreCliente: string;
+      telefonoCliente?: string;
+      direccionDelivery: string;
+      costoEnvio: number;
+      items: Array<{ platoCartaId: string; cantidad: number; notas?: string }>;
+    }) =>
+      apiFetch<{ ok: boolean; visitaId: string }>('/cash/pedidos/delivery', {
+        method: 'POST',
+        body: JSON.stringify(data),
       }),
   },
 };
@@ -145,7 +188,12 @@ export interface PagoCaja {
 
 export interface VisitaResumen {
   visitaId: string;
-  mesaNumero: number;
+  mesaNumero: number | null;
+  tipo: 'mesa' | 'llevar' | 'delivery';
+  nombreCliente?: string | null;
+  telefonoCliente?: string | null;
+  direccionDelivery?: string | null;
+  costoEnvio?: string | null;
   paraLlevar?: boolean;
   fechaApertura: string;
   total: string;
@@ -154,7 +202,12 @@ export interface VisitaResumen {
 
 export interface DetalleVisitaCaja {
   visitaId: string;
-  mesaNumero: number;
+  mesaNumero: number | null;
+  tipo: 'mesa' | 'llevar' | 'delivery';
+  nombreCliente?: string | null;
+  telefonoCliente?: string | null;
+  direccionDelivery?: string | null;
+  costoEnvio?: string | null;
   fechaApertura: string;
   resumen: Array<{ nombre: string; cantidad: number; precioUnitario: string; descuentoUnitario?: string }>;
   total: string;

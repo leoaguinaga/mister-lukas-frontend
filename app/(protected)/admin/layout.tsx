@@ -9,7 +9,6 @@ import Link from 'next/link';
 const TABS = [
   { href: '/admin',               label: 'Inicio' },
   { href: '/admin/mesas',         label: 'Mesas' },
-  { href: '/admin/stock',         label: 'Stock' },
   { href: '/admin/catalogo',      label: 'Carta' },
   { href: '/admin/promociones',   label: 'Promos' },
   { href: '/admin/usuarios',      label: 'Staff' },
