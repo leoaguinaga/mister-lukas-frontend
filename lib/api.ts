@@ -131,6 +131,10 @@ export const api = {
       apiFetch<TurnoCaja>('/cash/shift/close', { method: 'POST', body: JSON.stringify({ montoCierreReal }) }),
     registrarGasto: (monto: number, motivo: string) =>
       apiFetch<any>('/cash/shift/expense', { method: 'POST', body: JSON.stringify({ monto, motivo }) }),
+    editarGasto: (id: string, monto: number, motivo: string) =>
+      apiFetch<any>(`/cash/shift/expense/${id}`, { method: 'PATCH', body: JSON.stringify({ monto, motivo }) }),
+    eliminarGasto: (id: string) =>
+      apiFetch<any>(`/cash/shift/expense/${id}`, { method: 'DELETE' }),
     visitasParaCobrar: () => apiFetch<VisitaResumen[]>('/cash/visits-to-collect'),
     detalleVisita: (visitaId: string) => apiFetch<DetalleVisitaCaja>(`/cash/visits/${visitaId}`),
     registrarPago: (

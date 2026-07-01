@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { api, TurnoCaja, VisitaResumen, DetalleVisitaCaja } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Clock, Receipt, ChevronRight, X, Plus, Trash2, Search, ShoppingBag } from 'lucide-react';
+import { Clock, Receipt, ChevronRight, X, Plus, Trash2, Search, ShoppingBag, Pencil } from 'lucide-react';
 import { PlatoCarta } from '@/lib/types';
 
 type MetodoPago = 'efectivo' | 'tarjeta' | 'yape_plin' | 'transferencia';
@@ -540,12 +540,14 @@ function ModalCierreTurno({
 function ModalRegistrarGasto({
   onRegistrado,
   onCancelar,
+  gastoAEditar,
 }: {
   onRegistrado: () => void;
   onCancelar: () => void;
+  gastoAEditar?: { id: string; monto: string; motivo: string } | null;
 }) {
-  const [monto, setMonto] = useState('');
-  const [motivo, setMotivo] = useState('');
+  const [monto, setMonto] = useState(gastoAEditar ? gastoAEditar.monto : '');
+  const [motivo, setMotivo] = useState(gastoAEditar ? gastoAEditar.motivo : '');
   const [guardando, setGuardando] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -563,11 +565,16 @@ function ModalRegistrarGasto({
 
     setGuardando(true);
     try {
-      await api.caja.registrarGasto(valMonto, valMotivo);
-      toast.success('Gasto registrado');
+      if (gastoAEditar) {
+        await api.caja.editarGasto(gastoAEditar.id, valMonto, valMotivo);
+        toast.success('Gasto actualizado');
+      } else {
+        await api.caja.registrarGasto(valMonto, valMotivo);
+        toast.success('Gasto registrado');
+      }
       onRegistrado();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al registrar gasto');
+      toast.error(err instanceof Error ? err.message : 'Error al guardar gasto');
     } finally {
       setGuardando(false);
     }
@@ -577,8 +584,12 @@ function ModalRegistrarGasto({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl border border-border shadow-xl max-w-sm w-full p-5 space-y-4 animate-in fade-in zoom-in duration-200">
         <div>
-          <h3 className="font-bold text-lg text-[var(--carbon)]">Registrar Gasto</h3>
-          <p className="text-muted-foreground text-xs mt-0.5">El monto se retirará en efectivo de la caja activa.</p>
+          <h3 className="font-bold text-lg text-[var(--carbon)]">
+            {gastoAEditar ? 'Editar Gasto' : 'Registrar Gasto'}
+          </h3>
+          <p className="text-muted-foreground text-xs mt-0.5">
+            {gastoAEditar ? 'Modifica los datos del gasto seleccionado.' : 'El monto se retirará en efectivo de la caja activa.'}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -626,7 +637,7 @@ function ModalRegistrarGasto({
               disabled={guardando}
               className="flex-1 bg-[var(--terracota)] hover:bg-[#9e3726] text-white rounded-xl"
             >
-              {guardando ? 'Guardando…' : 'Registrar'}
+              {guardando ? 'Guardando…' : (gastoAEditar ? 'Guardar' : 'Registrar')}
             </Button>
           </div>
         </form>
@@ -644,7 +655,21 @@ export default function CajaPage() {
   const [detalle, setDetalle] = useState<DetalleVisitaCaja | null>(null);
   const [mostrarCierre, setMostrarCierre] = useState(false);
   const [mostrarGasto, setMostrarGasto] = useState(false);
+  const [gastoAEditar, setGastoAEditar] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
+
+  const handleEliminarGasto = async (gastoId: string) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar este gasto? El monto volverá al efectivo teórico de la caja.')) {
+      return;
+    }
+    try {
+      await api.caja.eliminarGasto(gastoId);
+      toast.success('Gasto eliminado');
+      fetchDatos();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al eliminar el gasto');
+    }
+  };
 
   // Estados de navegación por tabs
   const [tabActivo, setTabActivo] = useState<'cobros' | 'llevar' | 'delivery'>('cobros');
@@ -1070,12 +1095,35 @@ export default function CajaPage() {
                     hour: '2-digit', minute: '2-digit', hour12: false,
                   });
                   return (
-                    <div key={g.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                    <div key={g.id} className="flex items-center justify-between px-4 py-3 text-sm group hover:bg-gray-50 transition-colors">
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-[var(--carbon)] truncate">{g.motivo}</p>
                         <p className="text-muted-foreground text-xs">{hora}</p>
                       </div>
-                      <span className="font-bold text-[var(--terracota)] shrink-0 ml-3">S/{g.monto}</span>
+                      <div className="flex items-center gap-3 shrink-0 ml-3">
+                        <span className="font-bold text-[var(--terracota)]">S/{g.monto}</span>
+                        {turno.estado !== 'cerrado' && (
+                          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => {
+                                setGastoAEditar(g);
+                                setMostrarGasto(true);
+                              }}
+                              className="text-muted-foreground hover:text-[var(--dorado)] p-1 rounded-md hover:bg-gray-100 transition-colors"
+                              title="Editar gasto"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleEliminarGasto(g.id)}
+                              className="text-muted-foreground hover:text-red-600 p-1 rounded-md hover:bg-gray-100 transition-colors"
+                              title="Eliminar gasto"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -1346,8 +1394,16 @@ export default function CajaPage() {
 
       {mostrarGasto && (
         <ModalRegistrarGasto
-          onRegistrado={() => { setMostrarGasto(false); fetchDatos(); }}
-          onCancelar={() => setMostrarGasto(false)}
+          gastoAEditar={gastoAEditar}
+          onRegistrado={() => {
+            setMostrarGasto(false);
+            setGastoAEditar(null);
+            fetchDatos();
+          }}
+          onCancelar={() => {
+            setMostrarGasto(false);
+            setGastoAEditar(null);
+          }}
         />
       )}
     </div>
