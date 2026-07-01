@@ -7,22 +7,25 @@ interface Props {
   pedido: Pedido;
   platoMap: Map<string, PlatoCarta>;
   onCancelar: (pedidoId: string) => void;
+  onCancelarItem?: (itemId: string) => void;
   cargando?: boolean;
 }
 
 const ESTADOS_ACTIVOS = ['pendiente', 'en_preparacion', 'listo'];
 
-export function RondaCard({ pedido, platoMap, onCancelar, cargando }: Props) {
+export function RondaCard({ pedido, platoMap, onCancelar, onCancelarItem, cargando }: Props) {
   const hora = new Date(pedido.fechaCreacion).toLocaleTimeString('es-PE', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   });
 
-  const subtotal = pedido.items.reduce(
-    (s, i) => s + parseFloat(i.precioUnitarioCongelado) * i.cantidad,
-    0,
-  );
+  const subtotal = pedido.items
+    .filter((i) => i.estado !== 'cancelado')
+    .reduce(
+      (s, i) => s + parseFloat(i.precioUnitarioCongelado) * i.cantidad,
+      0,
+    );
 
   const activo = ESTADOS_ACTIVOS.includes(pedido.estado);
   const codigoRonda = `R-${String(pedido.numeroCorto).padStart(4, '0')}`;
@@ -61,13 +64,25 @@ export function RondaCard({ pedido, platoMap, onCancelar, cargando }: Props) {
       <ul className="space-y-1.5">
         {pedido.items.map((item) => {
           const plato = platoMap.get(item.platoCartaId);
-          const tachado = pedido.estado === 'cancelado';
+          const tachado = pedido.estado === 'cancelado' || item.estado === 'cancelado';
           return (
-            <li key={item.id} className={tachado ? 'opacity-50 line-through' : ''}>
-              <span className="font-medium">{item.cantidad}×</span>{' '}
-              <span>{plato?.nombre ?? item.platoCartaId}</span>
-              {item.notas && (
-                <span className="ml-2 text-xs text-muted-foreground italic">→ {item.notas}</span>
+            <li key={item.id} className="flex items-center justify-between gap-2 text-sm">
+              <span className={tachado ? 'opacity-50 line-through flex-1 min-w-0' : 'flex-1 min-w-0'}>
+                <span className="font-medium">{item.cantidad}×</span>{' '}
+                <span>{plato?.nombre ?? item.platoCartaId}</span>
+                {item.notas && (
+                  <span className="ml-2 text-xs text-muted-foreground italic">→ {item.notas}</span>
+                )}
+              </span>
+              {activo && !tachado && onCancelarItem && (
+                <button
+                  onClick={() => onCancelarItem(item.id)}
+                  disabled={cargando}
+                  className="text-xs text-muted-foreground hover:text-[var(--terracota)] transition-colors opacity-70 hover:opacity-100 px-1 py-0.5 font-bold"
+                  title="Cancelar producto"
+                >
+                  ✕
+                </button>
               )}
             </li>
           );
@@ -90,3 +105,4 @@ export function RondaCard({ pedido, platoMap, onCancelar, cargando }: Props) {
     </div>
   );
 }
+

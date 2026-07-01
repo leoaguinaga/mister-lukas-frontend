@@ -477,10 +477,16 @@ function ModalCierreTurno({
           </div>
 
           {/* Efectivo en caja */}
+          {/* Efectivo en caja */}
           <div className="rounded-xl bg-[#fdf3d8] px-4 py-3 space-y-1.5 text-sm">
             <p className="text-xs font-semibold text-[var(--dorado)] uppercase tracking-widest">Efectivo en caja</p>
             <div className="flex justify-between"><span className="text-muted-foreground">Apertura</span><span>S/{turno.montoApertura}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Ventas efectivo</span><span>S/{canal.efectivo}</span></div>
+            {parseFloat(turno.totalGastos ?? '0') > 0 && (
+              <div className="flex justify-between text-[var(--terracota)] font-medium">
+                <span>Gastos del turno</span><span>-S/{turno.totalGastos}</span>
+              </div>
+            )}
             <div className="flex justify-between font-bold border-t border-[var(--dorado)]/30 pt-1.5">
               <span>Teórico</span><span className="text-[var(--carbon)]">S/{teorico.toFixed(2)}</span>
             </div>
@@ -529,6 +535,106 @@ function ModalCierreTurno({
   );
 }
 
+// ─── Modal: registrar gasto en efectivo ───────────────────────────────────────
+
+function ModalRegistrarGasto({
+  onRegistrado,
+  onCancelar,
+}: {
+  onRegistrado: () => void;
+  onCancelar: () => void;
+}) {
+  const [monto, setMonto] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [guardando, setGuardando] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const valMonto = parseFloat(monto);
+    if (isNaN(valMonto) || valMonto <= 0) {
+      toast.error('Ingresa un monto válido mayor a 0');
+      return;
+    }
+    const valMotivo = motivo.trim();
+    if (!valMotivo) {
+      toast.error('Ingresa un motivo para el gasto');
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      await api.caja.registrarGasto(valMonto, valMotivo);
+      toast.success('Gasto registrado');
+      onRegistrado();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al registrar gasto');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl border border-border shadow-xl max-w-sm w-full p-5 space-y-4 animate-in fade-in zoom-in duration-200">
+        <div>
+          <h3 className="font-bold text-lg text-[var(--carbon)]">Registrar Gasto</h3>
+          <p className="text-muted-foreground text-xs mt-0.5">El monto se retirará en efectivo de la caja activa.</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground font-medium">Monto (S/)</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">S/</span>
+              <input
+                type="number"
+                step="0.01"
+                required
+                autoFocus
+                placeholder="0.00"
+                value={monto}
+                onChange={(e) => setMonto(e.target.value)}
+                className="w-full pl-8 pr-3 h-10 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)] bg-[var(--crema)] font-semibold"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground font-medium">Motivo / Descripción</label>
+            <input
+              type="text"
+              required
+              placeholder="Ej: Compra de tuppers, gaseosas..."
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)] bg-[var(--crema)]"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancelar}
+              disabled={guardando}
+              className="flex-1 rounded-xl"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={guardando}
+              className="flex-1 bg-[var(--terracota)] hover:bg-[#9e3726] text-white rounded-xl"
+            >
+              {guardando ? 'Guardando…' : 'Registrar'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function CajaPage() {
@@ -537,6 +643,7 @@ export default function CajaPage() {
   const [visitaSeleccionada, setVisitaSeleccionada] = useState<VisitaResumen | null>(null);
   const [detalle, setDetalle] = useState<DetalleVisitaCaja | null>(null);
   const [mostrarCierre, setMostrarCierre] = useState(false);
+  const [mostrarGasto, setMostrarGasto] = useState(false);
   const [cargando, setCargando] = useState(true);
 
   // Estados de navegación por tabs
@@ -784,15 +891,23 @@ export default function CajaPage() {
               <Clock size={13} /> Desde {horaApertura}
             </p>
           </div>
-          <button
-            onClick={() => setMostrarCierre(true)}
-            className="rounded-xl border border-white/20 px-4 py-2 text-sm hover:bg-white/10 transition-colors"
-          >
-            Cerrar turno
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMostrarGasto(true)}
+              className="rounded-xl border border-white/20 px-4 py-2 text-sm hover:bg-white/10 transition-colors"
+            >
+              Registrar gasto
+            </button>
+            <button
+              onClick={() => setMostrarCierre(true)}
+              className="rounded-xl border border-white/20 px-4 py-2 text-sm hover:bg-white/10 transition-colors bg-white/5"
+            >
+              Cerrar turno
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="rounded-xl bg-white/10 p-3 space-y-0.5">
             <p className="text-xs text-white/60">Apertura</p>
             <p className="font-bold">S/{turno.montoApertura}</p>
@@ -800,6 +915,10 @@ export default function CajaPage() {
           <div className="rounded-xl bg-white/10 p-3 space-y-0.5">
             <p className="text-xs text-white/60">Ventas</p>
             <p className="font-bold text-[var(--dorado)]">S/{turno.totalTurno ?? '0.00'}</p>
+          </div>
+          <div className="rounded-xl bg-white/10 p-3 space-y-0.5">
+            <p className="text-xs text-white/60">Gastos</p>
+            <p className="font-bold text-[var(--terracota)]">S/{turno.totalGastos ?? '0.00'}</p>
           </div>
           <div className="rounded-xl bg-white/10 p-3 space-y-0.5">
             <p className="text-xs text-white/60">Efectivo caja</p>
@@ -936,6 +1055,33 @@ export default function CajaPage() {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground italic">No se han registrado pagos en este turno.</p>
+            )}
+          </div>
+
+          {/* Historial de gastos */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">
+              Gastos de este turno ({turno.gastos?.length ?? 0})
+            </h3>
+            {turno.gastos && turno.gastos.length > 0 ? (
+              <div className="rounded-xl border border-border overflow-hidden divide-y divide-border bg-white max-h-[250px] overflow-y-auto">
+                {turno.gastos.map((g) => {
+                  const hora = new Date(g.createdAt).toLocaleTimeString('es-PE', {
+                    hour: '2-digit', minute: '2-digit', hour12: false,
+                  });
+                  return (
+                    <div key={g.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-[var(--carbon)] truncate">{g.motivo}</p>
+                        <p className="text-muted-foreground text-xs">{hora}</p>
+                      </div>
+                      <span className="font-bold text-[var(--terracota)] shrink-0 ml-3">S/{g.monto}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">No se han registrado gastos en este turno.</p>
             )}
           </div>
         </div>
@@ -1195,6 +1341,13 @@ export default function CajaPage() {
           turno={turno}
           onCerrado={() => { setMostrarCierre(false); setTurno(null); fetchDatos(); }}
           onCancelar={() => setMostrarCierre(false)}
+        />
+      )}
+
+      {mostrarGasto && (
+        <ModalRegistrarGasto
+          onRegistrado={() => { setMostrarGasto(false); fetchDatos(); }}
+          onCancelar={() => setMostrarGasto(false)}
         />
       )}
     </div>

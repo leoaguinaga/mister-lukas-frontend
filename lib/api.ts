@@ -68,6 +68,8 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ estado, ...opciones }),
       }),
+    cancelarItem: (itemId: string) =>
+      apiFetch<any>(`/orders/items/${itemId}/cancel`, { method: 'PATCH' }),
   },
   monitor: {
     get: () => apiFetch<MonitorItem[]>('/monitor'),
@@ -79,6 +81,8 @@ export const api = {
   },
   admin: {
     turnosHoy:          () => apiFetch<TurnoResumen[]>('/cash/shifts'),
+    turnosHistorial:    () => apiFetch<TurnoResumen[]>('/cash/shifts/history'),
+    turnoDetalle:       (id: string) => apiFetch<TurnoDetalle>(`/cash/shifts/${id}`),
     listUsuarios:       () => apiFetch<UsuarioAdmin[]>('/admin/users'),
     crearUsuario:       (data: { name: string; email: string; password: string; role: string }) =>
       apiFetch('/admin/users', { method: 'POST', body: JSON.stringify(data) }),
@@ -125,6 +129,8 @@ export const api = {
       apiFetch<TurnoCaja>('/cash/shift/open', { method: 'POST', body: JSON.stringify({ montoApertura }) }),
     cerrarTurno: (montoCierreReal: number) =>
       apiFetch<TurnoCaja>('/cash/shift/close', { method: 'POST', body: JSON.stringify({ montoCierreReal }) }),
+    registrarGasto: (monto: number, motivo: string) =>
+      apiFetch<any>('/cash/shift/expense', { method: 'POST', body: JSON.stringify({ monto, motivo }) }),
     visitasParaCobrar: () => apiFetch<VisitaResumen[]>('/cash/visits-to-collect'),
     detalleVisita: (visitaId: string) => apiFetch<DetalleVisitaCaja>(`/cash/visits/${visitaId}`),
     registrarPago: (
@@ -173,8 +179,19 @@ export interface TurnoCaja {
   fechaCierre?: string;
   totalEfectivo?: string;
   totalTurno?: string;
+  totalGastos?: string;
   porCanal?: { efectivo: string; tarjeta: string; yape_plin: string; transferencia: string };
   pagos?: PagoCaja[];
+  gastos?: GastoCaja[];
+}
+
+export interface GastoCaja {
+  id: string;
+  turnoCajaId: string;
+  cajeroUsuarioId: string;
+  monto: string;
+  motivo: string;
+  createdAt: string;
 }
 
 export interface PagoCaja {
@@ -235,7 +252,23 @@ export interface TurnoResumen {
   fechaCierre?: string;
   porCanal: { efectivo: string; tarjeta: string; yape_plin: string; transferencia: string };
   totalTurno: string;
+  totalGastos?: string;
   cobros: number;
+}
+
+export interface TurnoDetalle extends TurnoResumen {
+  pagos: Array<{
+    id: string;
+    visitaMesaId: string;
+    metodoPago: 'efectivo' | 'tarjeta' | 'yape_plin' | 'transferencia';
+    montoTotal: string;
+    fechaPago: string;
+    mesaNumero?: number | null;
+    clienteNombre?: string | null;
+    visitaTipo: 'mesa' | 'llevar' | 'delivery';
+  }>;
+  gastos?: GastoCaja[];
+  totalEfectivo: string;
 }
 
 export interface MonitorItem {

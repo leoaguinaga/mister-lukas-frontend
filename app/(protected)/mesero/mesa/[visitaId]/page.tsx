@@ -34,6 +34,7 @@ export default function MesaPage() {
   const [cobrandoPagos, setCobrandoPagos] = useState<Array<{ metodo: 'efectivo' | 'tarjeta' | 'yape_plin' | 'transferencia'; monto: string }>>([{ metodo: 'efectivo', monto: '' }]);
   const [cobrando, setCobrando] = useState(false);
   const [pedidoPorCancelar, setPedidoPorCancelar] = useState<string | null>(null);
+  const [itemPorCancelar, setItemPorCancelar] = useState<string | null>(null);
   const [confirmarLiberar, setConfirmarLiberar] = useState(false);
   const [rondaParaLlevar, setRondaParaLlevar] = useState(false);
   const [nombreClienteLlevar, setNombreClienteLlevar] = useState('');
@@ -125,6 +126,26 @@ export default function MesaPage() {
       fetchVisita();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setMarcando(null);
+    }
+  }
+
+  function iniciarCancelarItem(itemId: string) {
+    setItemPorCancelar(itemId);
+  }
+
+  async function confirmarCancelarItem() {
+    if (!itemPorCancelar) return;
+    const itemId = itemPorCancelar;
+    setMarcando(itemId);
+    try {
+      await api.pedidos.cancelarItem(itemId);
+      toast.success('Producto cancelado');
+      setItemPorCancelar(null);
+      fetchVisita();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al cancelar producto');
     } finally {
       setMarcando(null);
     }
@@ -563,7 +584,8 @@ export default function MesaPage() {
                     pedido={pedido}
                     platoMap={platoMap}
                     onCancelar={(id) => setPedidoPorCancelar(id)}
-                    cargando={marcando === pedido.id}
+                    onCancelarItem={iniciarCancelarItem}
+                    cargando={marcando !== null}
                   />
                 ))
             )}
@@ -576,6 +598,18 @@ export default function MesaPage() {
         loading={!!marcando}
         onConfirm={confirmarCancelarRonda}
         onCancel={() => setPedidoPorCancelar(null)}
+      />
+
+      <ConfirmDialog
+        open={!!itemPorCancelar}
+        title="¿Cancelar producto?"
+        description="El producto se anulará de esta ronda y su subtotal se descontará de la cuenta de la mesa."
+        confirmLabel="Sí, cancelar"
+        cancelLabel="No, mantener"
+        variant="destructive"
+        loading={marcando !== null}
+        onConfirm={confirmarCancelarItem}
+        onCancel={() => setItemPorCancelar(null)}
       />
 
       <ConfirmDialog
