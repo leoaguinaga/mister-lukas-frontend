@@ -6,6 +6,7 @@ import { api, TurnoCaja, VisitaResumen, DetalleVisitaCaja } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Clock, Receipt, ChevronRight, X, Plus, Trash2, Search, ShoppingBag, Pencil } from 'lucide-react';
 import { PlatoCarta } from '@/lib/types';
+import { CancelarRondaDialog } from '@/components/mesero/CancelarRondaDialog';
 
 type MetodoPago = 'efectivo' | 'tarjeta' | 'yape_plin' | 'transferencia';
 type LineaPago = { id: number; metodo: MetodoPago; monto: string };
@@ -94,10 +95,11 @@ function AbrirTurno({ onAbierto }: { onAbierto: (t: TurnoCaja) => void }) {
 // ─── Modal: detalle + cobro con pagos mixtos ──────────────────────────────────
 
 function ModalCobro({
-  visita, detalle, onCobrado, onCerrar, onRefreshDetalle,
+  visita, detalle, productos, onCobrado, onCerrar, onRefreshDetalle,
 }: {
   visita: VisitaResumen;
   detalle: DetalleVisitaCaja | null;
+  productos: PlatoCarta[];
   onCobrado: () => void;
   onCerrar: () => void;
   onRefreshDetalle: () => Promise<void>;
@@ -107,6 +109,12 @@ function ModalCobro({
   const [ajusteAbierto, setAjusteAbierto] = useState(false);
   const [ajusteMonto, setAjusteMonto] = useState('');
   const [ajusteMotivo, setAjusteMotivo] = useState('');
+
+  const [agregandoProductos, setAgregandoProductos] = useState(false);
+  const [filtroCategoria, setFiltroCategoria] = useState('todos');
+  const [busqueda, setBusqueda] = useState('');
+  const [basketAdicion, setBasketAdicion] = useState<Map<string, { plato: PlatoCarta; cantidad: number; notes: string }>>(new Map());
+  const [cancelarPedidoAbierto, setCancelarPedidoAbierto] = useState(false);
 
   const ajusteValor = parseFloat(ajusteMonto || '0');
   const tieneAjuste = Math.abs(ajusteValor) > 0.005;
@@ -191,18 +199,12 @@ function ModalCobro({
     }
   }
 
-  async function handleCancelarPedidoCompleto() {
-    const motivo = prompt('Por favor, ingresa el motivo de la cancelación:');
-    if (motivo === null) return;
-    const motivoLimpio = motivo.trim();
-    if (!motivoLimpio) {
-      toast.error('El motivo de cancelación es obligatorio');
-      return;
-    }
+  async function confirmarCancelarPedidoCompleto(motivo: string) {
     setCargando(true);
     try {
-      await api.caja.cancelarVisita(visita.visitaId, motivoLimpio);
+      await api.caja.cancelarVisita(visita.visitaId, motivo);
       toast.success('Pedido anulado y cancelado');
+      setCancelarPedidoAbierto(false);
       onCobrado();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al cancelar pedido');
@@ -211,13 +213,78 @@ function ModalCobro({
     }
   }
 
+  async function handleGuardarAdicion() {
+    const items = Array.from(basketAdicion.values()).filter((i) => i.cantidad > 0);
+    if (!items.length) return;
+    setCargando(true);
+    try {
+      await api.visitas.crearPedido(
+        visita.visitaId,
+        items.map((i) => ({
+          platoCartaId: i.plato.id,
+          cantidad: i.cantidad,
+          notas: i.notes.trim() || undefined,
+        })),
+        visita.tipo === 'llevar' || visita.tipo === 'delivery' ? { paraLlevar: true, nombreClienteLlevar: visita.nombreCliente || 'Cliente' } : {}
+      );
+      toast.success('Productos agregados al pedido');
+      setBasketAdicion(new Map());
+      setAgregandoProductos(false);
+      await onRefreshDetalle();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al agregar productos');
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  function setQtyAdicion(plato: PlatoCarta, qty: number) {
+    setBasketAdicion((prev) => {
+      const next = new Map(prev);
+      if (qty <= 0) {
+        next.delete(plato.id);
+      } else {
+        const actual = next.get(plato.id) ?? { plato, cantidad: 0, notes: '' };
+        next.set(plato.id, { ...actual, cantidad: qty });
+      }
+      return next;
+    });
+  }
+
+  function setNotesAdicion(platoId: string, notes: string) {
+    setBasketAdicion((prev) => {
+      const next = new Map(prev);
+      const actual = next.get(platoId);
+      if (actual) {
+        next.set(platoId, { ...actual, notes: notes });
+      }
+      return next;
+    });
+  }
+
+  const productosFiltrados = productos.filter((plato) => {
+    if (!plato.activo || !plato.disponible) return false;
+    if (filtroCategoria !== 'todos' && plato.categoria !== filtroCategoria) return false;
+    if (busqueda.trim() !== '') {
+      const query = busqueda.toLowerCase();
+      return plato.nombre.toLowerCase().includes(query) || plato.categoria.toLowerCase().includes(query);
+    }
+    return true;
+  });
+
+  const totalAdicion = Array.from(basketAdicion.values()).reduce((sum, item) => {
+    return sum + (parseFloat(item.plato.precio) * item.cantidad);
+  }, 0);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40">
       <div className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <h3 className="font-bold text-lg text-[var(--carbon)]">
-            {visita.tipo === 'llevar' ? (
+            {agregandoProductos ? (
+              "Agregar Productos"
+            ) : visita.tipo === 'llevar' ? (
               `🥡 Llevar: ${visita.nombreCliente ?? 'Cliente'}`
             ) : visita.tipo === 'delivery' ? (
               `🛵 Delivery: ${visita.nombreCliente ?? 'Cliente'}`
@@ -225,243 +292,378 @@ function ModalCobro({
               `Mesa ${visita.mesaNumero}`
             )}
           </h3>
-          <button onClick={onCerrar} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
+          <button
+            onClick={() => {
+              if (agregandoProductos) {
+                setBasketAdicion(new Map());
+                setAgregandoProductos(false);
+              } else {
+                onCerrar();
+              }
+            }}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X size={20} />
+          </button>
         </div>
 
-        <div className="overflow-y-auto flex-1">
-          {/* Detalles del cliente para Delivery */}
-          {visita.tipo === 'delivery' && (
-            <div className="px-5 pt-4">
-              <div className="text-xs text-muted-foreground bg-muted/60 rounded-xl p-3 space-y-1">
-                <p><strong>Dirección:</strong> {visita.direccionDelivery ?? '—'}</p>
-                {visita.telefonoCliente && <p><strong>Teléfono:</strong> {visita.telefonoCliente}</p>}
-                {visita.costoEnvio && parseFloat(visita.costoEnvio) > 0 && (
-                  <p><strong>Envío:</strong> S/{parseFloat(visita.costoEnvio).toFixed(2)}</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Detalle de consumo */}
-          <div className="p-5 space-y-2">
-            {detalle ? (
-              <ul className="space-y-1.5">
-                {detalle.resumen.map((item, i) => {
-                  const descU = parseFloat(item.descuentoUnitario ?? '0');
-                  const descTotal = descU * item.cantidad;
-                  return (
-                    <li key={i} className="text-sm border-b border-border/40 pb-1.5 last:border-b-0 last:pb-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground font-medium">
-                          {item.cantidad}× {item.nombre}
-                        </span>
-                        <div className="flex items-center gap-3">
-                          <span className="font-bold text-[var(--carbon)]">
-                            S/{(parseFloat(item.precioUnitario) * item.cantidad).toFixed(2)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleCancelarItem(item.itemIds)}
-                            disabled={cargando}
-                            title="Cancelar producto"
-                            className="text-xs text-muted-foreground hover:text-[var(--terracota)] font-bold transition-colors p-1 disabled:opacity-50"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                      {descU > 0 && (
-                        <div className="flex justify-between text-xs text-[var(--salvia)] pl-4 pr-7">
-                          <span>↳ promo aplicada</span>
-                          <span>-S/{descTotal.toFixed(2)}</span>
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">Cargando detalle…</p>
-            )}
-
-            {/* Desglose de totales */}
-            <div className="border-t border-border pt-3 space-y-1 text-sm">
-              {detalle && parseFloat(detalle.descuentoTotal ?? '0') > 0 && (
-                <>
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Subtotal Platos</span>
-                    <span>S/{(parseFloat(detalle.total) - parseFloat(visita.costoEnvio || '0') + parseFloat(detalle.descuentoTotal!)).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-[var(--salvia)] font-medium">
-                    <span>Descuento</span>
-                    <span>-S/{detalle.descuentoTotal}</span>
-                  </div>
-                </>
-              )}
-              {visita.tipo === 'delivery' && visita.costoEnvio && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Costo de Envío</span>
-                  <span>S/{parseFloat(visita.costoEnvio).toFixed(2)}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-border pt-3 flex justify-between font-bold text-base">
-              <span>{tieneAjuste ? 'Subtotal' : 'Total'}</span>
-              <span className="text-[var(--carbon)]">S/{totalItems.toFixed(2)}</span>
-            </div>
-            
-            {tieneAjuste && (
-              <>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Ajuste{ajusteMotivo ? ` · ${ajusteMotivo}` : ''}
-                  </span>
-                  <span className={ajusteValor > 0 ? 'text-blue-600 font-medium' : 'text-[var(--terracota)] font-medium'}>
-                    {ajusteValor > 0 ? '+' : ''}S/{ajusteValor.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between font-bold text-base border-t border-border pt-2">
-                  <span>Total a cobrar</span>
-                  <span className="text-[var(--carbon)]">S/{totalACobrar.toFixed(2)}</span>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Acciones secundarias: imprimir resumen + ajuste manual */}
-          <div className="px-5 pb-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleImprimirResumen}
-                disabled={imprimiendo}
-                className="flex-1 flex items-center justify-center gap-2 h-10 rounded-xl border border-border text-sm text-[var(--carbon)] hover:bg-muted/50 transition-colors disabled:opacity-50"
-              >
-                <Receipt size={15} /> {imprimiendo ? 'Imprimiendo…' : 'Imprimir resumen'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAjusteAbierto((v) => !v)}
-                className={[
-                  'flex-1 h-10 rounded-xl border text-sm transition-colors',
-                  ajusteAbierto || tieneAjuste
-                    ? 'border-[var(--dorado)] bg-[var(--dorado)]/10 text-[var(--carbon)]'
-                    : 'border-border text-muted-foreground hover:bg-muted/50',
-                ].join(' ')}
-              >
-                {tieneAjuste ? `Ajuste (${ajusteValor > 0 ? '+' : ''}S/${ajusteValor.toFixed(2)})` : 'Ajuste manual'}
-              </button>
-            </div>
-
-            {ajusteAbierto && (
-              <div className="rounded-xl border border-[var(--dorado)]/40 bg-[var(--dorado)]/5 p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">S/</span>
-                    <input
-                      type="number"
-                      step="0.10"
-                      placeholder="0.00 (use - para descontar)"
-                      value={ajusteMonto}
-                      onChange={(e) => setAjusteMonto(e.target.value)}
-                      className="w-full pl-8 pr-2 h-10 text-sm rounded-lg border border-border bg-white focus:outline-none focus:ring-1 focus:ring-[var(--dorado)]"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setAjusteMonto(''); setAjusteMotivo(''); setAjusteAbierto(false); }}
-                    className="text-xs text-muted-foreground hover:text-[var(--terracota)] px-2"
-                  >
-                    Quitar
-                  </button>
-                </div>
+        {agregandoProductos ? (
+          <>
+            {/* Buscador */}
+            <div className="px-5 pt-3 shrink-0">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
                 <input
                   type="text"
-                  placeholder="Motivo del ajuste (obligatorio)"
-                  value={ajusteMotivo}
-                  onChange={(e) => setAjusteMotivo(e.target.value)}
-                  className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[var(--dorado)]"
+                  placeholder="Buscar producto..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  className="w-full pl-9 pr-3 h-10 text-sm rounded-xl border border-border focus:outline-none focus:ring-1 focus:ring-[var(--dorado)] bg-white text-[var(--carbon)] font-medium"
                 />
-                {tieneAjuste && !ajusteMotivo.trim() && (
-                  <p className="text-xs text-[var(--terracota)]">
-                    Indica un motivo para registrar el ajuste.
-                  </p>
-                )}
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Líneas de pago */}
-          <div className="px-5 pb-3 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Forma de pago</p>
-
-            <div className="space-y-2">
-              {lineas.map((linea) => (
-                <div key={linea.id} className="flex items-center gap-2">
-                  <select
-                    value={linea.metodo}
-                    onChange={(e) => updateLinea(linea.id, 'metodo', e.target.value as MetodoPago)}
-                    className="flex-1 h-11 rounded-xl border border-border bg-white text-sm px-3 focus:outline-none focus:ring-2 focus:ring-[var(--dorado)]"
-                  >
-                    {METODOS.map(({ key, label }) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
-                  <div className="relative w-32">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">S/</span>
-                    <input
-                      type="number" min="0" step="0.10"
-                      value={linea.monto}
-                      onChange={(e) => updateLinea(linea.id, 'monto', e.target.value)}
-                      className="w-full pl-8 pr-2 h-11 text-sm font-semibold rounded-xl border border-border bg-[var(--crema)] focus:outline-none focus:ring-2 focus:ring-[var(--dorado)] text-right"
-                    />
-                  </div>
-                  {lineas.length > 1 && (
-                    <button onClick={() => quitarLinea(linea.id)} className="text-muted-foreground hover:text-[var(--terracota)]">
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
+            {/* Categorías */}
+            <div className="flex gap-2 overflow-x-auto pb-2 shrink-0 border-b border-border px-5 py-3">
+              {CATEGORIAS_CARTA.map((cat) => (
+                <button
+                  key={cat.key}
+                  onClick={() => setFiltroCategoria(cat.key)}
+                  className={[
+                    'text-xs font-semibold px-3 py-1.5 rounded-full border shrink-0 transition-colors',
+                    filtroCategoria === cat.key
+                      ? 'bg-[var(--dorado)] text-[var(--carbon)] border-[var(--dorado)] font-bold'
+                      : 'bg-white text-muted-foreground border-border hover:border-foreground'
+                  ].join(' ')}
+                >
+                  {cat.label}
+                </button>
               ))}
             </div>
 
-            <button
-              onClick={agregarLinea}
-              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-[var(--carbon)] transition-colors"
-            >
-              <Plus size={15} /> Agregar método
-            </button>
-
-            {/* Resumen de totales */}
-            <div className={[
-              'rounded-xl px-4 py-3 flex justify-between items-center text-sm font-medium',
-              cuadrado ? 'bg-[#e8f0d8] text-[var(--salvia)]' : pendiente > 0 ? 'bg-[#fde8e4] text-[var(--terracota)]' : 'bg-blue-50 text-blue-600',
-            ].join(' ')}>
-              <span>{cuadrado ? 'Cuadrado ✓' : pendiente > 0 ? `Pendiente: S/${pendiente.toFixed(2)}` : `Excede: S/${Math.abs(pendiente).toFixed(2)}`}</span>
-              <span>S/{totalLineas.toFixed(2)} / S/{totalACobrar.toFixed(2)}</span>
+            {/* Listado de Platos */}
+            <div className="overflow-y-auto flex-1 p-5 space-y-3 bg-[var(--crema)]/20">
+              {productosFiltrados.length === 0 ? (
+                <p className="text-center text-muted-foreground text-sm py-10 bg-white border border-border rounded-xl">No se encontraron productos</p>
+              ) : (
+                productosFiltrados.map((plato) => {
+                  const item = basketAdicion.get(plato.id);
+                  const cantidad = item?.cantidad ?? 0;
+                  return (
+                    <div key={plato.id} className="rounded-xl border border-border p-3 space-y-2 bg-white flex flex-col justify-between shadow-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-bold text-sm text-[var(--carbon)] leading-tight">{plato.nombre}</p>
+                          <p className="text-xs text-muted-foreground font-medium">S/{parseFloat(plato.precio).toFixed(2)}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setQtyAdicion(plato, cantidad - 1)}
+                            disabled={cantidad <= 0}
+                            className="h-8 w-8 rounded-full border border-border flex items-center justify-center text-sm font-semibold disabled:opacity-30 hover:bg-muted"
+                          >
+                            −
+                          </button>
+                          <span className="w-5 text-center font-bold text-sm">{cantidad}</span>
+                          <button
+                            type="button"
+                            onClick={() => setQtyAdicion(plato, cantidad + 1)}
+                            className="h-8 w-8 rounded-full border border-border flex items-center justify-center text-sm font-semibold hover:bg-muted"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      {cantidad > 0 && (
+                        <input
+                          type="text"
+                          placeholder="Nota (sin cremas, sin ají...)"
+                          value={item?.notes ?? ''}
+                          onChange={(e) => setNotesAdicion(plato.id, e.target.value)}
+                          className="w-full text-xs px-3.5 py-2 rounded-lg border border-border bg-muted/30 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[var(--dorado)]"
+                        />
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
-          </div>
-        </div>
 
-        {/* Botón cobrar */}
-        <div className="px-5 pb-5 pt-2 shrink-0 border-t border-border space-y-2">
-          <Button
-            className="w-full h-12 text-base bg-[var(--dorado)] hover:bg-[#c49238] text-[var(--carbon)] font-bold disabled:opacity-50"
-            onClick={handleCobrar} disabled={cargando || !cuadrado || !ajusteValido}
-          >
-            {cargando ? 'Registrando…' : `Cobrar S/${totalACobrar.toFixed(2)}`}
-          </Button>
-          <button
-            type="button"
-            onClick={handleCancelarPedidoCompleto}
-            disabled={cargando}
-            className="w-full h-10 text-xs font-semibold rounded-xl text-[var(--terracota)] bg-[var(--terracota)]/10 hover:bg-[var(--terracota)]/20 transition-colors"
-          >
-            Anular / Cancelar Pedido
-          </button>
-        </div>
+            {/* Footer Adición */}
+            <div className="px-5 pb-5 pt-3 shrink-0 border-t border-border flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setBasketAdicion(new Map()); setAgregandoProductos(false); }}
+                className="flex-1 h-12 text-sm font-semibold rounded-xl border border-border text-muted-foreground hover:bg-muted/40 transition-colors"
+              >
+                Volver
+              </button>
+              <Button
+                className="flex-1 h-12 text-sm bg-[var(--dorado)] hover:bg-[#c49238] text-[var(--carbon)] font-bold disabled:opacity-50"
+                onClick={handleGuardarAdicion}
+                disabled={cargando || Array.from(basketAdicion.values()).reduce((sum, i) => sum + i.cantidad, 0) === 0}
+              >
+                {cargando ? 'Guardando…' : `Confirmar y Enviar · S/${totalAdicion.toFixed(2)}`}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="overflow-y-auto flex-1">
+              {/* Detalles del cliente para Delivery */}
+              {visita.tipo === 'delivery' && (
+                <div className="px-5 pt-4">
+                  <div className="text-xs text-muted-foreground bg-muted/60 rounded-xl p-3 space-y-1">
+                    <p><strong>Dirección:</strong> {visita.direccionDelivery ?? '—'}</p>
+                    {visita.telefonoCliente && <p><strong>Teléfono:</strong> {visita.telefonoCliente}</p>}
+                    {visita.costoEnvio && parseFloat(visita.costoEnvio) > 0 && (
+                      <p><strong>Envío:</strong> S/{parseFloat(visita.costoEnvio).toFixed(2)}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Detalle de consumo */}
+              <div className="p-5 space-y-2">
+                {detalle ? (
+                  <ul className="space-y-1.5">
+                    {detalle.resumen.map((item, i) => {
+                      const descU = parseFloat(item.descuentoUnitario ?? '0');
+                      const descTotal = descU * item.cantidad;
+                      return (
+                        <li key={i} className="text-sm border-b border-border/40 pb-1.5 last:border-b-0 last:pb-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground font-medium">
+                              {item.cantidad}× {item.nombre}
+                            </span>
+                            <div className="flex items-center gap-3">
+                              <span className="font-bold text-[var(--carbon)]">
+                                S/{(parseFloat(item.precioUnitario) * item.cantidad).toFixed(2)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelarItem(item.itemIds)}
+                                disabled={cargando}
+                                title="Cancelar producto"
+                                className="text-xs text-muted-foreground hover:text-[var(--terracota)] font-bold transition-colors p-1 disabled:opacity-50"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                          {descU > 0 && (
+                            <div className="flex justify-between text-xs text-[var(--salvia)] pl-4 pr-7">
+                              <span>↳ promo aplicada</span>
+                              <span>-S/{descTotal.toFixed(2)}</span>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Cargando detalle…</p>
+                )}
+
+                {/* Desglose de totales */}
+                <div className="border-t border-border pt-3 space-y-1 text-sm">
+                  {detalle && parseFloat(detalle.descuentoTotal ?? '0') > 0 && (
+                    <>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Subtotal Platos</span>
+                        <span>S/{(parseFloat(detalle.total) - parseFloat(visita.costoEnvio || '0') + parseFloat(detalle.descuentoTotal!)).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-[var(--salvia)] font-medium">
+                        <span>Descuento</span>
+                        <span>-S/{detalle.descuentoTotal}</span>
+                      </div>
+                    </>
+                  )}
+                  {visita.tipo === 'delivery' && visita.costoEnvio && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Costo de Envío</span>
+                      <span>S/{parseFloat(visita.costoEnvio).toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-border pt-3 flex justify-between font-bold text-base">
+                  <span>{tieneAjuste ? 'Subtotal' : 'Total'}</span>
+                  <span className="text-[var(--carbon)]">S/{totalItems.toFixed(2)}</span>
+                </div>
+                
+                {tieneAjuste && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Ajuste{ajusteMotivo ? ` · ${ajusteMotivo}` : ''}
+                      </span>
+                      <span className={ajusteValor > 0 ? 'text-blue-600 font-medium' : 'text-[var(--terracota)] font-medium'}>
+                        {ajusteValor > 0 ? '+' : ''}S/{ajusteValor.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between font-bold text-base border-t border-border pt-2">
+                      <span>Total a cobrar</span>
+                      <span className="text-[var(--carbon)]">S/{totalACobrar.toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
+
+                {/* Botón para agregar más productos inline */}
+                {detalle && (
+                  <button
+                    type="button"
+                    onClick={() => setAgregandoProductos(true)}
+                    className="w-full flex items-center justify-center gap-1.5 mt-3 py-2 border border-dashed border-[var(--dorado)] bg-[var(--dorado)]/5 hover:bg-[var(--dorado)]/10 text-[var(--dorado)] rounded-xl text-xs font-semibold transition-all active:scale-[0.98]"
+                  >
+                    <Plus size={13} /> Agregar platos / bebidas
+                  </button>
+                )}
+              </div>
+
+              {/* Acciones secundarias: imprimir resumen + ajuste manual */}
+              <div className="px-5 pb-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleImprimirResumen}
+                    disabled={imprimiendo}
+                    className="flex-1 flex items-center justify-center gap-2 h-10 rounded-xl border border-border text-sm text-[var(--carbon)] hover:bg-muted/50 transition-colors disabled:opacity-50"
+                  >
+                    <Receipt size={15} /> {imprimiendo ? 'Imprimiendo…' : 'Imprimir resumen'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAjusteAbierto((v) => !v)}
+                    className={[
+                      'flex-1 h-10 rounded-xl border text-sm transition-colors',
+                      ajusteAbierto || tieneAjuste
+                        ? 'border-[var(--dorado)] bg-[var(--dorado)]/10 text-[var(--carbon)]'
+                        : 'border-border text-muted-foreground hover:bg-muted/50',
+                    ].join(' ')}
+                  >
+                    {tieneAjuste ? `Ajuste (${ajusteValor > 0 ? '+' : ''}S/${ajusteValor.toFixed(2)})` : 'Ajuste manual'}
+                  </button>
+                </div>
+
+                {ajusteAbierto && (
+                  <div className="rounded-xl border border-[var(--dorado)]/40 bg-[var(--dorado)]/5 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">S/</span>
+                        <input
+                          type="number"
+                          step="0.10"
+                          placeholder="0.00 (use - para descontar)"
+                          value={ajusteMonto}
+                          onChange={(e) => setAjusteMonto(e.target.value)}
+                          className="w-full pl-8 pr-2 h-10 text-sm rounded-lg border border-border bg-white focus:outline-none focus:ring-1 focus:ring-[var(--dorado)]"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setAjusteMonto(''); setAjusteMotivo(''); setAjusteAbierto(false); }}
+                        className="text-xs text-muted-foreground hover:text-[var(--terracota)] px-2"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Motivo del ajuste (obligatorio)"
+                      value={ajusteMotivo}
+                      onChange={(e) => setAjusteMotivo(e.target.value)}
+                      className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[var(--dorado)]"
+                    />
+                    {tieneAjuste && !ajusteMotivo.trim() && (
+                      <p className="text-xs text-[var(--terracota)]">
+                        Indica un motivo para registrar el ajuste.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Líneas de pago */}
+              <div className="px-5 pb-3 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Forma de pago</p>
+
+                <div className="space-y-2">
+                  {lineas.map((linea) => (
+                    <div key={linea.id} className="flex items-center gap-2">
+                      <select
+                        value={linea.metodo}
+                        onChange={(e) => updateLinea(linea.id, 'metodo', e.target.value as MetodoPago)}
+                        className="flex-1 h-11 rounded-xl border border-border bg-white text-sm px-3 focus:outline-none focus:ring-2 focus:ring-[var(--dorado)]"
+                      >
+                        {METODOS.map(({ key, label }) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                      <div className="relative w-32">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">S/</span>
+                        <input
+                          type="number" min="0" step="0.10"
+                          value={linea.monto}
+                          onChange={(e) => updateLinea(linea.id, 'monto', e.target.value)}
+                          className="w-full pl-8 pr-2 h-11 text-sm font-semibold rounded-xl border border-border bg-[var(--crema)] focus:outline-none focus:ring-2 focus:ring-[var(--dorado)] text-right"
+                        />
+                      </div>
+                      {lineas.length > 1 && (
+                        <button onClick={() => quitarLinea(linea.id)} className="text-muted-foreground hover:text-[var(--terracota)]">
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={agregarLinea}
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-[var(--carbon)] transition-colors"
+                >
+                  <Plus size={15} /> Agregar método
+                </button>
+
+                {/* Resumen de totales */}
+                <div className={[
+                  'rounded-xl px-4 py-3 flex justify-between items-center text-sm font-medium',
+                  cuadrado ? 'bg-[#e8f0d8] text-[var(--salvia)]' : pendiente > 0 ? 'bg-[#fde8e4] text-[var(--terracota)]' : 'bg-blue-50 text-blue-600',
+                ].join(' ')}>
+                  <span>{cuadrado ? 'Cuadrado ✓' : pendiente > 0 ? `Pendiente: S/${pendiente.toFixed(2)}` : `Excede: S/${Math.abs(pendiente).toFixed(2)}`}</span>
+                  <span>S/{totalLineas.toFixed(2)} / S/{totalACobrar.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Botón cobrar */}
+            <div className="px-5 pb-5 pt-2 shrink-0 border-t border-border space-y-2">
+              <Button
+                className="w-full h-12 text-base bg-[var(--dorado)] hover:bg-[#c49238] text-[var(--carbon)] font-bold disabled:opacity-50"
+                onClick={handleCobrar} disabled={cargando || !cuadrado || !ajusteValido}
+              >
+                {cargando ? 'Registrando…' : `Cobrar S/${totalACobrar.toFixed(2)}`}
+              </Button>
+              <button
+                type="button"
+                onClick={() => setCancelarPedidoAbierto(true)}
+                disabled={cargando}
+                className="w-full h-10 text-xs font-semibold rounded-xl text-[var(--terracota)] bg-[var(--terracota)]/10 hover:bg-[var(--terracota)]/20 transition-colors"
+              >
+                Anular / Cancelar Pedido
+              </button>
+            </div>
+          </>
+        )}
       </div>
+
+      <CancelarRondaDialog
+        open={cancelarPedidoAbierto}
+        loading={cargando}
+        onConfirm={confirmarCancelarPedidoCompleto}
+        onCancel={() => setCancelarPedidoAbierto(false)}
+      />
     </div>
   );
 }
@@ -1436,6 +1638,7 @@ export default function CajaPage() {
         <ModalCobro
           visita={visitaSeleccionada}
           detalle={detalle}
+          productos={productos}
           onCobrado={handleCobrado}
           onCerrar={() => setVisitaSeleccionada(null)}
           onRefreshDetalle={async () => {
