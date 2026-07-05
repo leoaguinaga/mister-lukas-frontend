@@ -181,6 +181,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    cancelarVisita: (visitaId: string, motivo: string) =>
+      apiFetch<{ ok: boolean }>(`/cash/visits/${visitaId}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ motivo }),
+      }),
   },
 };
 
@@ -242,7 +247,7 @@ export interface DetalleVisitaCaja {
   direccionDelivery?: string | null;
   costoEnvio?: string | null;
   fechaApertura: string;
-  resumen: Array<{ nombre: string; cantidad: number; precioUnitario: string; descuentoUnitario?: string }>;
+  resumen: Array<{ nombre: string; cantidad: number; precioUnitario: string; descuentoUnitario?: string; itemIds: string[] }>;
   total: string;
   descuentoTotal?: string;
 }

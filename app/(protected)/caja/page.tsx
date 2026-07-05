@@ -94,12 +94,13 @@ function AbrirTurno({ onAbierto }: { onAbierto: (t: TurnoCaja) => void }) {
 // ─── Modal: detalle + cobro con pagos mixtos ──────────────────────────────────
 
 function ModalCobro({
-  visita, detalle, onCobrado, onCerrar,
+  visita, detalle, onCobrado, onCerrar, onRefreshDetalle,
 }: {
   visita: VisitaResumen;
   detalle: DetalleVisitaCaja | null;
   onCobrado: () => void;
   onCerrar: () => void;
+  onRefreshDetalle: () => Promise<void>;
 }) {
   const totalItems = parseFloat(detalle?.total ?? visita.total);
 
@@ -118,12 +119,9 @@ function ModalCobro({
   const [imprimiendo, setImprimiendo] = useState(false);
   let nextId = lineas.length;
 
-  // Reajustar el monto de la primera línea cuando el ajuste cambia y solo hay 1 línea
+  // Reajustar el monto de la primera línea cuando el total cambia
   useEffect(() => {
-    if (lineas.length === 1) {
-      setLineas([{ ...lineas[0], monto: totalACobrar.toFixed(2) }]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setLineas([{ id: 0, metodo: 'efectivo', monto: totalACobrar.toFixed(2) }]);
   }, [totalACobrar]);
 
   const totalLineas = lineas.reduce((s, l) => s + parseFloat(l.monto || '0'), 0);
@@ -177,6 +175,42 @@ function ModalCobro({
     }
   }
 
+  async function handleCancelarItem(itemIds: string[]) {
+    if (!confirm('¿Estás seguro de que deseas cancelar este producto de la cuenta?')) return;
+    setCargando(true);
+    try {
+      for (const itemId of itemIds) {
+        await api.pedidos.cancelarItem(itemId);
+      }
+      toast.success('Producto cancelado');
+      await onRefreshDetalle();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al cancelar producto');
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  async function handleCancelarPedidoCompleto() {
+    const motivo = prompt('Por favor, ingresa el motivo de la cancelación:');
+    if (motivo === null) return;
+    const motivoLimpio = motivo.trim();
+    if (!motivoLimpio) {
+      toast.error('El motivo de cancelación es obligatorio');
+      return;
+    }
+    setCargando(true);
+    try {
+      await api.caja.cancelarVisita(visita.visitaId, motivoLimpio);
+      toast.success('Pedido anulado y cancelado');
+      onCobrado();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al cancelar pedido');
+    } finally {
+      setCargando(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40">
       <div className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
@@ -216,13 +250,28 @@ function ModalCobro({
                   const descU = parseFloat(item.descuentoUnitario ?? '0');
                   const descTotal = descU * item.cantidad;
                   return (
-                    <li key={i} className="text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">{item.cantidad}× {item.nombre}</span>
-                        <span className="font-medium">S/{(parseFloat(item.precioUnitario) * item.cantidad).toFixed(2)}</span>
+                    <li key={i} className="text-sm border-b border-border/40 pb-1.5 last:border-b-0 last:pb-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground font-medium">
+                          {item.cantidad}× {item.nombre}
+                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-[var(--carbon)]">
+                            S/{(parseFloat(item.precioUnitario) * item.cantidad).toFixed(2)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelarItem(item.itemIds)}
+                            disabled={cargando}
+                            title="Cancelar producto"
+                            className="text-xs text-muted-foreground hover:text-[var(--terracota)] font-bold transition-colors p-1 disabled:opacity-50"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                       {descU > 0 && (
-                        <div className="flex justify-between text-xs text-[var(--salvia)] pl-4">
+                        <div className="flex justify-between text-xs text-[var(--salvia)] pl-4 pr-7">
                           <span>↳ promo aplicada</span>
                           <span>-S/{descTotal.toFixed(2)}</span>
                         </div>
@@ -396,13 +445,21 @@ function ModalCobro({
         </div>
 
         {/* Botón cobrar */}
-        <div className="px-5 pb-5 pt-2 shrink-0 border-t border-border">
+        <div className="px-5 pb-5 pt-2 shrink-0 border-t border-border space-y-2">
           <Button
             className="w-full h-12 text-base bg-[var(--dorado)] hover:bg-[#c49238] text-[var(--carbon)] font-bold disabled:opacity-50"
             onClick={handleCobrar} disabled={cargando || !cuadrado || !ajusteValido}
           >
             {cargando ? 'Registrando…' : `Cobrar S/${totalACobrar.toFixed(2)}`}
           </Button>
+          <button
+            type="button"
+            onClick={handleCancelarPedidoCompleto}
+            disabled={cargando}
+            className="w-full h-10 text-xs font-semibold rounded-xl text-[var(--terracota)] bg-[var(--terracota)]/10 hover:bg-[var(--terracota)]/20 transition-colors"
+          >
+            Anular / Cancelar Pedido
+          </button>
         </div>
       </div>
     </div>
@@ -1381,6 +1438,13 @@ export default function CajaPage() {
           detalle={detalle}
           onCobrado={handleCobrado}
           onCerrar={() => setVisitaSeleccionada(null)}
+          onRefreshDetalle={async () => {
+            try {
+              const d = await api.caja.detalleVisita(visitaSeleccionada.visitaId);
+              setDetalle(d);
+            } catch {}
+            fetchDatos();
+          }}
         />
       )}
 
