@@ -387,15 +387,29 @@ export default function MesaPage() {
         </div>
       )}
 
-      {/* Banner: visita marcada como "para llevar" (mesa virtual) */}
-      {visita.paraLlevar && (
+      {/* Banner: visita de delivery o para llevar */}
+      {visita.tipo === 'delivery' ? (
+        <div className="flex flex-col px-5 py-2 bg-blue-50 border-b border-blue-200">
+          <div className="flex items-center gap-2">
+            <span className="text-base leading-none">🛵</span>
+            <span className="text-xs font-semibold text-blue-700">
+              Delivery {visita.nombreCliente ? `— ${visita.nombreCliente}` : ''} {visita.telefonoCliente ? `(${visita.telefonoCliente})` : ''}
+            </span>
+          </div>
+          {visita.direccionDelivery && (
+            <p className="text-xs text-blue-600 mt-0.5 ml-6">
+              Dirección: {visita.direccionDelivery}
+            </p>
+          )}
+        </div>
+      ) : visita.tipo === 'llevar' ? (
         <div className="flex items-center gap-2 px-5 py-2 bg-[var(--dorado)]/10 border-b border-[var(--dorado)]/30">
           <span className="text-base leading-none">🥡</span>
           <span className="text-xs font-semibold text-[var(--dorado)]">
             Pedido para llevar {visita.nombreCliente ? `— ${visita.nombreCliente}` : ''}
           </span>
         </div>
-      )}
+      ) : null}
 
       {/* Sub-header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-white">

@@ -61,6 +61,18 @@ export const api = {
         method: 'POST',
         body: data ? JSON.stringify(data) : undefined,
       }),
+    activeLlevarDelivery: () =>
+      apiFetch<Array<{
+        id: string;
+        tipo: 'llevar' | 'delivery';
+        nombreCliente: string | null;
+        telefonoCliente: string | null;
+        direccionDelivery: string | null;
+        costoEnvio: string | null;
+        fechaApertura: string;
+        total: string;
+        cantidadItems: number;
+      }>>('/visits/active-llevar-delivery'),
   },
   pedidos: {
     cambiarEstado: (pedidoId: string, estado: string, opciones: { motivoCancelacion?: string } = {}) =>
