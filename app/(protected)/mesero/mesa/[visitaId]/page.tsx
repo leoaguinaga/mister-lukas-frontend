@@ -38,7 +38,21 @@ export default function MesaPage() {
   const [confirmarLiberar, setConfirmarLiberar] = useState(false);
   const [rondaParaLlevar, setRondaParaLlevar] = useState(false);
   const [nombreClienteLlevar, setNombreClienteLlevar] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const cartaRef = useRef<HTMLDivElement>(null);
+
+  const cleanString = (str: string) =>
+    str
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+  const matchesSearch = useCallback((platoName: string) => {
+    if (!searchQuery) return true;
+    const nameClean = cleanString(platoName);
+    const queryWords = cleanString(searchQuery).split(/\s+/).filter(Boolean);
+    return queryWords.every(word => nameClean.includes(word));
+  }, [searchQuery]);
 
   const platoMap = useMemo(() => new Map(menu.map((p) => [p.id, p])), [menu]);
 
@@ -453,9 +467,31 @@ export default function MesaPage() {
 
         {/* ─── Izquierda: tomar pedido ─────────────────────────── */}
         <div className="flex flex-col border-r border-border overflow-hidden">
+          {/* Buscador de platos */}
+          <div className="p-4 border-b border-border bg-white flex items-center gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">🔍</span>
+              <input
+                type="text"
+                placeholder="Buscar plato (ej: pollo papas)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full text-sm pl-9 pr-8 py-2.5 rounded-xl border border-border bg-muted/20 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[var(--terracota)]"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-base leading-none font-semibold"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto p-4 space-y-5">
             {categorias.map(({ label, key }) => {
-              const platos = menu.filter((p) => p.categoria === key);
+              const platos = menu.filter((p) => p.categoria === key && matchesSearch(p.nombre));
               if (platos.length === 0) return null;
               return (
                 <section key={key}>
@@ -572,7 +608,60 @@ export default function MesaPage() {
         </div>
 
         {/* ─── Derecha: rondas activas ──────────────────────────── */}
-        <div className="flex flex-col overflow-hidden">
+        <div className="flex flex-col overflow-hidden bg-muted/5">
+          {/* Borrador de Pedido */}
+          {itemsParaEnviar.length > 0 && (
+            <div className="border-b border-border bg-amber-50/60 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--terracota)] flex items-center gap-1.5">
+                  📝 Resumen del Pedido (Borrador)
+                </h4>
+                <button
+                  onClick={() => setLineas(new Map())}
+                  className="text-xs text-muted-foreground hover:text-[var(--terracota)] transition-colors underline"
+                >
+                  Vaciar borrador
+                </button>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                {itemsParaEnviar.map((item) => {
+                  const plato = platoMap.get(item.platoCartaId);
+                  return (
+                    <div key={item.platoCartaId} className="flex items-start justify-between gap-3 bg-white p-2.5 rounded-xl border border-amber-200/60 shadow-sm text-xs">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-md min-w-[20px] text-center">
+                            {item.cantidad}x
+                          </span>
+                          <p className="font-medium text-[var(--carbon)] truncate">
+                            {plato?.nombre}
+                          </p>
+                        </div>
+                        {item.notas && (
+                          <p className="text-muted-foreground italic mt-1 ml-7 truncate">
+                            "{item.notas}"
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-[var(--carbon)]">
+                          S/{(parseFloat(plato?.precio ?? '0') * item.cantidad).toFixed(2)}
+                        </span>
+                        <button
+                          onClick={() => setLinea(item.platoCartaId, { cantidad: 0, notas: '' })}
+                          className="text-muted-foreground hover:text-[var(--terracota)] text-sm px-1"
+                          title="Eliminar del borrador"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="px-4 py-3 border-b border-border bg-white">
             <h3 className="text-sm font-semibold text-[var(--carbon)]">
               Rondas activas
