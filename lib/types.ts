@@ -1,17 +1,15 @@
 export type EstadoMesa = 'libre' | 'ocupada';
 export type EstadoPedido = 'pendiente' | 'en_preparacion' | 'listo' | 'entregado' | 'cancelado';
-export type CategoriaProducto =
-  | 'pollo_a_la_brasa'
-  | 'entradas'
-  | 'platos_a_la_carta'
-  | 'parrillas'
-  | 'parrillas_familiares'
-  | 'pastas'
-  | 'guarniciones'
-  | 'refrescos_jugos'
-  | 'bebidas'
-  | 'cocteles'
-  | 'extras';
+
+export interface CategoriaCarta {
+  id: string;
+  nombre: string;
+  slug: string;
+  descuentaStock: boolean;
+  esParaCocina: boolean;
+  orden: number;
+  activo: boolean;
+}
 
 export interface Mesa {
   id: string;
@@ -26,7 +24,8 @@ export interface PlatoCarta {
   id: string;
   nombre: string;
   precio: string;
-  categoria: CategoriaProducto;
+  categoriaId: string;
+  categoria: CategoriaCarta;
   disponible: boolean;
   activo: boolean;
   descripcion: string | null;

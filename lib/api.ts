@@ -36,6 +36,19 @@ export const api = {
         body: JSON.stringify({ disponible }),
       }),
   },
+  categorias: {
+    list: () => apiFetch<import('./types').CategoriaCarta[]>('/categorias'),
+    create: (data: { nombre: string; slug: string; descuentaStock?: boolean; esParaCocina?: boolean; orden?: number }) =>
+      apiFetch<import('./types').CategoriaCarta>('/categorias', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: Partial<import('./types').CategoriaCarta>) =>
+      apiFetch<import('./types').CategoriaCarta>(`/categorias/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+  },
   visitas: {
     get: (visitaId: string) => apiFetch<import('./types').Visita>(`/visits/${visitaId}`),
     crearPedido: (
@@ -104,14 +117,14 @@ export const api = {
       apiFetch('/tables', { method: 'POST', body: JSON.stringify({ numero, capacidad }) }),
     eliminarMesa:       (id: string) =>
       apiFetch(`/tables/${id}`, { method: 'DELETE' }),
-    crearPlato:         (data: { nombre: string; precio: string; categoria: string }) =>
+    crearPlato:         (data: { nombre: string; precio: string; categoriaId: string; descripcion?: string }) =>
       apiFetch('/platos', { method: 'POST', body: JSON.stringify(data) }),
     crearPlatosBulk:    (data: {
-      categoria: string;
+      categoriaId: string;
       platos: Array<{ nombre: string; precio: string; descripcion?: string }>;
     }) =>
       apiFetch<import('./types').PlatoCarta[]>('/platos/bulk', { method: 'POST', body: JSON.stringify(data) }),
-    editarPlato:        (id: string, data: { nombre: string; precio: string; categoria: string }) =>
+    editarPlato:        (id: string, data: { nombre?: string; precio?: string; categoriaId?: string; descripcion?: string }) =>
       apiFetch<import('./types').PlatoCarta>(`/platos/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     toggleActivoPlato:  (id: string, activo: boolean) =>
       apiFetch(`/platos/${id}`, { method: 'PATCH', body: JSON.stringify({ activo }) }),

@@ -3,71 +3,33 @@
 import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
-import { PlatoCarta, CategoriaProducto } from '@/lib/types';
+import { PlatoCarta, CategoriaCarta } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Plus, Search, Trash2 } from 'lucide-react';
-
-// ─── Etiquetas y orden ────────────────────────────────────────────────────────
-
-const CATEGORIA_LABEL: Record<CategoriaProducto, string> = {
-  pollo_a_la_brasa:     'Pollo a la brasa',
-  entradas:             'Entradas',
-  platos_a_la_carta:    'Platos a la carta',
-  parrillas:            'Parrillas',
-  parrillas_familiares: 'Parrillas Familiares',
-  pastas:               'Pastas',
-  guarniciones:         'Guarniciones',
-  refrescos_jugos:      'Refrescos o Jugos',
-  bebidas:              'Bebidas',
-  cocteles:             'Cócteles',
-  extras:               'Extras',
-};
-
-// Orden de secciones en la vista
-const SECCIONES_CARTA: Array<{ label: string; filter: (p: PlatoCarta) => boolean }> = [
-  { label: 'Pollo a la brasa',    filter: (p) => p.categoria === 'pollo_a_la_brasa' },
-  { label: 'Entradas',            filter: (p) => p.categoria === 'entradas' },
-  { label: 'Platos a la carta',   filter: (p) => p.categoria === 'platos_a_la_carta' },
-  { label: 'Parrillas',           filter: (p) => p.categoria === 'parrillas' },
-  { label: 'Parrillas Familiares',filter: (p) => p.categoria === 'parrillas_familiares' },
-  { label: 'Pastas',              filter: (p) => p.categoria === 'pastas' },
-  { label: 'Guarniciones',        filter: (p) => p.categoria === 'guarniciones' },
-  { label: 'Refrescos o Jugos',   filter: (p) => p.categoria === 'refrescos_jugos' },
-  { label: 'Bebidas',             filter: (p) => p.categoria === 'bebidas' },
-  { label: 'Cócteles',            filter: (p) => p.categoria === 'cocteles' },
-  { label: 'Extras',              filter: (p) => p.categoria === 'extras' },
-];
-
-// ─── Tipos internos ───────────────────────────────────────────────────────────
 
 type FormState = {
   nombre: string;
   precio: string;
-  categoria: CategoriaProducto;
-};
-
-const FORM_VACIO: FormState = {
-  nombre: '',
-  precio: '',
-  categoria: 'platos_a_la_carta',
+  categoriaId: string;
 };
 
 // ─── Modal de edición ─────────────────────────────────────────────────────────
 
-function EditModal({ plato, onClose, onSaved }: {
+function EditModal({ plato, categorias, onClose, onSaved }: {
   plato: PlatoCarta;
+  categorias: CategoriaCarta[];
   onClose: () => void;
   onSaved: (p: PlatoCarta) => void;
 }) {
   const [form, setForm] = useState<FormState>({
     nombre:              plato.nombre,
     precio:              plato.precio,
-    categoria:           plato.categoria,
+    categoriaId:         plato.categoriaId || plato.categoria?.id || (categorias[0]?.id ?? ''),
   });
   const [guardando, setGuardando] = useState(false);
 
   async function handleGuardar() {
-    if (!form.nombre || !form.precio) { toast.error('Completa nombre y precio'); return; }
+    if (!form.nombre || !form.precio || !form.categoriaId) { toast.error('Completa nombre, precio y categoría'); return; }
     const precio = parseFloat(form.precio);
     if (isNaN(precio) || precio <= 0) { toast.error('Precio inválido'); return; }
 
@@ -76,7 +38,7 @@ function EditModal({ plato, onClose, onSaved }: {
       const updated = await api.admin.editarPlato(plato.id, {
         nombre:              form.nombre,
         precio:              precio.toFixed(2),
-        categoria:           form.categoria,
+        categoriaId:         form.categoriaId,
       });
       onSaved({
         ...plato,
@@ -92,8 +54,6 @@ function EditModal({ plato, onClose, onSaved }: {
       setGuardando(false);
     }
   }
-
-
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -126,12 +86,12 @@ function EditModal({ plato, onClose, onSaved }: {
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Categoría</label>
             <select
-              value={form.categoria}
-              onChange={(e) => setForm((p) => ({ ...p, categoria: e.target.value as CategoriaProducto }))}
+              value={form.categoriaId}
+              onChange={(e) => setForm((p) => ({ ...p, categoriaId: e.target.value }))}
               className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)] bg-white"
             >
-              {Object.entries(CATEGORIA_LABEL).map(([val, label]) => (
-                <option key={val} value={val}>{label}</option>
+              {categorias.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.nombre}</option>
               ))}
             </select>
           </div>
@@ -154,8 +114,16 @@ function EditModal({ plato, onClose, onSaved }: {
   );
 }
 
-function BulkModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [categoria, setCategoria] = useState<CategoriaProducto>('platos_a_la_carta');
+function BulkModal({
+  categorias,
+  onClose,
+  onSaved,
+}: {
+  categorias: CategoriaCarta[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [categoriaId, setCategoriaId] = useState<string>(categorias[0]?.id ?? '');
   const [filas, setFilas] = useState<Array<{ tempId: number; nombre: string; precio: string; descripcion: string }>>([
     { tempId: 1, nombre: '', precio: '', descripcion: '' },
   ]);
@@ -186,6 +154,10 @@ function BulkModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
       toast.error('Añade al menos un plato con nombre y precio');
       return;
     }
+    if (!categoriaId) {
+      toast.error('Selecciona una categoría para el lote');
+      return;
+    }
 
     for (const f of filasValidas) {
       const p = parseFloat(f.precio);
@@ -198,7 +170,7 @@ function BulkModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
     setGuardando(true);
     try {
       await api.admin.crearPlatosBulk({
-        categoria,
+        categoriaId,
         platos: filasValidas.map((f) => ({
           nombre: f.nombre.trim(),
           precio: parseFloat(f.precio).toFixed(2),
@@ -232,12 +204,12 @@ function BulkModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
           <div className="space-y-1">
             <label className="text-xs font-semibold text-muted-foreground uppercase">Categoría para el lote *</label>
             <select
-              value={categoria}
-              onChange={(e) => setCategoria(e.target.value as CategoriaProducto)}
+              value={categoriaId}
+              onChange={(e) => setCategoriaId(e.target.value)}
               className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)] bg-white"
             >
-              {Object.entries(CATEGORIA_LABEL).map(([val, label]) => (
-                <option key={val} value={val}>{label}</option>
+              {categorias.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.nombre}</option>
               ))}
             </select>
           </div>
@@ -324,21 +296,28 @@ function BulkModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
 
 export default function AdminCatalogoPage() {
   const [platos, setPlatos]       = useState<PlatoCarta[]>([]);
+  const [categorias, setCategorias] = useState<CategoriaCarta[]>([]);
   const [cargando, setCargando]   = useState(true);
   const [toggling, setToggling]   = useState<string | null>(null);
   const [editando, setEditando]   = useState<PlatoCarta | null>(null);
-  const [form, setForm]           = useState<FormState>(FORM_VACIO);
+  const [form, setForm]           = useState<FormState>({ nombre: '', precio: '', categoriaId: '' });
   const [guardando, setGuardando] = useState(false);
   const [formAbierto, setFormAbierto] = useState(false);
   const [busqueda, setBusqueda]   = useState('');
-  const [filtroCat, setFiltroCat] = useState<'todas' | CategoriaProducto>('todas');
+  const [filtroCat, setFiltroCat] = useState<'todas' | string>('todas');
   const [bulkModalAbierto, setBulkModalAbierto] = useState(false);
 
   const fetchPlatos = useCallback(async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/platos`, { credentials: 'include' });
-      const data = await res.json();
-      if (Array.isArray(data)) setPlatos(data);
+      const [resPlatos, catData] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/platos`, { credentials: 'include' }).then((r) => r.json()),
+        api.categorias.list().catch(() => []),
+      ]);
+      if (Array.isArray(resPlatos)) setPlatos(resPlatos);
+      if (Array.isArray(catData)) {
+        setCategorias(catData);
+        setForm((f) => (f.categoriaId ? f : { ...f, categoriaId: catData[0]?.id ?? '' }));
+      }
     } catch { /* silencioso */ }
     finally { setCargando(false); }
   }, []);
@@ -373,19 +352,19 @@ export default function AdminCatalogoPage() {
   }
 
   async function handleCrearPlato() {
-    if (!form.nombre || !form.precio) { toast.error('Completa nombre y precio'); return; }
+    if (!form.nombre || !form.precio || !form.categoriaId) { toast.error('Completa nombre, precio y categoría'); return; }
     const precio = parseFloat(form.precio);
     if (isNaN(precio) || precio <= 0) { toast.error('Precio inválido'); return; }
 
     setGuardando(true);
     try {
       await api.admin.crearPlato({
-        nombre:    form.nombre,
-        precio:    precio.toFixed(2),
-        categoria: form.categoria,
+        nombre:      form.nombre,
+        precio:      precio.toFixed(2),
+        categoriaId: form.categoriaId,
       });
       toast.success(`"${form.nombre}" agregado a la carta`);
-      setForm(FORM_VACIO);
+      setForm({ nombre: '', precio: '', categoriaId: categorias[0]?.id ?? '' });
       setFormAbierto(false);
       fetchPlatos();
     } catch (err) {
@@ -441,6 +420,7 @@ export default function AdminCatalogoPage() {
       {editando && (
         <EditModal
           plato={editando}
+          categorias={categorias}
           onClose={() => setEditando(null)}
           onSaved={(updated) => {
             setPlatos((prev) => prev.map((p) => p.id === updated.id ? updated : p));
@@ -452,6 +432,7 @@ export default function AdminCatalogoPage() {
 
       {bulkModalAbierto && (
         <BulkModal
+          categorias={categorias}
           onClose={() => setBulkModalAbierto(false)}
           onSaved={() => {
             fetchPlatos();
@@ -484,7 +465,7 @@ export default function AdminCatalogoPage() {
           </div>
         </div>
 
-        {/* Formulario nuevo plato (colapsable, ahora arriba) */}
+        {/* Formulario nuevo plato (colapsable) */}
         {formAbierto && (
           <div className="rounded-2xl border border-border bg-white p-5 space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -507,19 +488,19 @@ export default function AdminCatalogoPage() {
               <div className="col-span-2 space-y-1">
                 <label className="text-xs text-muted-foreground">Categoría</label>
                 <select
-                  value={form.categoria}
-                  onChange={(e) => setForm((p) => ({ ...p, categoria: e.target.value as CategoriaProducto }))}
+                  value={form.categoriaId}
+                  onChange={(e) => setForm((p) => ({ ...p, categoriaId: e.target.value }))}
                   className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)] bg-white"
                 >
-                  {Object.entries(CATEGORIA_LABEL).map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
+                  {categorias.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.nombre}</option>
                   ))}
                 </select>
               </div>
             </div>
             <Button
               className="w-full bg-[var(--dorado)] hover:bg-[#c49238] text-[var(--carbon)] font-semibold"
-              onClick={handleCrearPlato} disabled={guardando || !form.nombre || !form.precio}
+              onClick={handleCrearPlato} disabled={guardando || !form.nombre || !form.precio || !form.categoriaId}
             >
               {guardando ? 'Agregando…' : 'Agregar a la carta'}
             </Button>
@@ -540,12 +521,12 @@ export default function AdminCatalogoPage() {
           </div>
           <select
             value={filtroCat}
-            onChange={(e) => setFiltroCat(e.target.value as typeof filtroCat)}
+            onChange={(e) => setFiltroCat(e.target.value)}
             className="h-10 px-3 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)]"
           >
             <option value="todas">Todas las categorías</option>
-            {Object.entries(CATEGORIA_LABEL).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
+            {categorias.map((cat) => (
+              <option key={cat.id} value={cat.id}>{cat.nombre}</option>
             ))}
           </select>
         </div>
@@ -553,7 +534,7 @@ export default function AdminCatalogoPage() {
         {(() => {
           const q = busqueda.trim().toLowerCase();
           const platosFiltrados = platos.filter((p) => {
-            if (filtroCat !== 'todas' && p.categoria !== filtroCat) return false;
+            if (filtroCat !== 'todas' && p.categoriaId !== filtroCat && p.categoria?.id !== filtroCat) return false;
             if (q && !p.nombre.toLowerCase().includes(q)) return false;
             return true;
           });
@@ -564,12 +545,12 @@ export default function AdminCatalogoPage() {
               </p>
             );
           }
-          return SECCIONES_CARTA.map(({ label, filter }) => {
-            const items = platosFiltrados.filter(filter);
+          return categorias.map((cat) => {
+            const items = platosFiltrados.filter((p) => p.categoriaId === cat.id || p.categoria?.id === cat.id);
             if (!items.length) return null;
             return (
-              <section key={label}>
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">{label}</h3>
+              <section key={cat.id}>
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">{cat.nombre}</h3>
                 <div className="rounded-2xl border border-border bg-white overflow-hidden divide-y divide-border">
                   {items.map((p) => <PlatoRow key={p.id} plato={p} />)}
                 </div>

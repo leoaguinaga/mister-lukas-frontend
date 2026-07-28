@@ -264,10 +264,10 @@ function ModalCobro({
 
   const productosFiltrados = productos.filter((plato) => {
     if (!plato.activo || !plato.disponible) return false;
-    if (filtroCategoria !== 'todos' && plato.categoria !== filtroCategoria) return false;
+    if (filtroCategoria !== 'todos' && plato.categoriaId !== filtroCategoria && plato.categoria?.id !== filtroCategoria && plato.categoria?.slug !== filtroCategoria) return false;
     if (busqueda.trim() !== '') {
       const query = busqueda.toLowerCase();
-      return plato.nombre.toLowerCase().includes(query) || plato.categoria.toLowerCase().includes(query);
+      return plato.nombre.toLowerCase().includes(query) || (plato.categoria?.nombre ?? '').toLowerCase().includes(query);
     }
     return true;
   });
@@ -1159,7 +1159,7 @@ export default function CajaPage() {
   // Filtrado de catálogo
   const productosFiltrados = productos.filter((p) => {
     if (!p.activo) return false;
-    const matchCat = catSeleccionada === 'todos' || p.categoria === catSeleccionada;
+    const matchCat = catSeleccionada === 'todos' || p.categoriaId === catSeleccionada || p.categoria?.id === catSeleccionada || p.categoria?.slug === catSeleccionada;
     const matchSearch = p.nombre.toLowerCase().includes(searchQuery.toLowerCase());
     return matchCat && matchSearch;
   });
@@ -1615,7 +1615,7 @@ export default function CajaPage() {
                     </div>
                     <div className="flex justify-between items-center w-full">
                       <span className="text-[10px] text-muted-foreground capitalize truncate max-w-[80px]">
-                        {plato.categoria.replace(/_/g, ' ')}
+                        {plato.categoria?.nombre ?? ''}
                       </span>
                       {!plato.disponible ? (
                         <span className="text-[9px] bg-red-100 text-red-800 font-bold rounded-full px-2 py-0.5">Agotado</span>

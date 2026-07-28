@@ -56,6 +56,8 @@ export default function MesaPage() {
 
   const platoMap = useMemo(() => new Map(menu.map((p) => [p.id, p])), [menu]);
 
+  const [categoriasLista, setCategoriasLista] = useState<import('@/lib/types').CategoriaCarta[]>([]);
+
   const fetchVisita = useCallback(async () => {
     try {
       const data = await api.visitas.get(visitaId);
@@ -67,6 +69,7 @@ export default function MesaPage() {
 
   useEffect(() => {
     api.menu.list().then(setMenu).catch(() => { });
+    api.categorias.list().then(setCategoriasLista).catch(() => { });
     fetchVisita();
     const interval = setInterval(fetchVisita, 5000);
     return () => clearInterval(interval);
@@ -247,35 +250,6 @@ export default function MesaPage() {
     }
   }
 
-  const TIPO_CARTA: Array<{ label: string; filter: (p: PlatoCarta) => boolean }> = [
-    { label: 'Entradas', filter: (p) => p.categoria === 'entradas' },
-    { label: 'Platos a la carta', filter: (p) => p.categoria === 'platos_a_la_carta' },
-    { label: 'Parrillas', filter: (p) => p.categoria === 'parrillas' },
-    { label: 'Parrillas Familiares', filter: (p) => p.categoria === 'parrillas_familiares' },
-    { label: 'Pastas', filter: (p) => p.categoria === 'pastas' },
-    { label: 'Guarniciones', filter: (p) => p.categoria === 'guarniciones' },
-    { label: 'Pollo a la brasa', filter: (p) => p.categoria === 'pollo_a_la_brasa' },
-    { label: 'Refrescos o Jugos', filter: (p) => p.categoria === 'refrescos_jugos' },
-    { label: 'Bebidas', filter: (p) => p.categoria === 'bebidas' },
-    { label: 'Cócteles', filter: (p) => p.categoria === 'cocteles' },
-    { label: 'Extras', filter: (p) => p.categoria === 'extras' },
-  ];
-
-  // Agrupar menu por categoría para mostrar
-  const categorias: Array<{ label: string; key: string }> = [
-    { label: 'Pollo a la brasa', key: 'pollo_a_la_brasa' },
-    { label: 'Bebidas', key: 'bebidas' },
-    { label: 'Refrescos o Jugos', key: 'refrescos_jugos' },
-    { label: 'Cócteles', key: 'cocteles' },
-    { label: 'Entradas', key: 'entradas' },
-    { label: 'Platos a la carta', key: 'platos_a_la_carta' },
-    { label: 'Parrillas', key: 'parrillas' },
-    { label: 'Parrillas Familiares', key: 'parrillas_familiares' },
-    { label: 'Pastas', key: 'pastas' },
-    { label: 'Guarniciones', key: 'guarniciones' },
-    { label: 'Extras', key: 'extras' },
-  ];
-
   if (!visita) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -301,12 +275,14 @@ export default function MesaPage() {
             </button>
           </div>
           <div ref={cartaRef} className="p-5 space-y-6 max-w-lg mx-auto">
-            {TIPO_CARTA.map(({ label, filter }) => {
-              const items = menu.filter((p) => p.activo && p.disponible && filter(p));
+            {categoriasLista.map((cat) => {
+              const items = menu.filter(
+                (p) => p.activo && p.disponible && (p.categoriaId === cat.id || p.categoria?.id === cat.id),
+              );
               if (!items.length) return null;
               return (
-                <section key={label}>
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">{label}</h3>
+                <section key={cat.id}>
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">{cat.nombre}</h3>
                   <div className="rounded-2xl border border-border bg-white overflow-hidden divide-y divide-border">
                     {items.map((p) => (
                       <div key={p.id} className="flex items-center justify-between px-4 py-3">
@@ -490,13 +466,15 @@ export default function MesaPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-5">
-            {categorias.map(({ label, key }) => {
-              const platos = menu.filter((p) => p.categoria === key && matchesSearch(p.nombre));
+            {categoriasLista.map((cat) => {
+              const platos = menu.filter(
+                (p) => (p.categoriaId === cat.id || p.categoria?.id === cat.id) && matchesSearch(p.nombre),
+              );
               if (platos.length === 0) return null;
               return (
-                <section key={key}>
+                <section key={cat.id}>
                   <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">
-                    {label}
+                    {cat.nombre}
                   </h3>
                   <div className="space-y-2">
                     {platos.map((plato) => {
@@ -518,7 +496,7 @@ export default function MesaPage() {
                                 <span className="text-xs text-muted-foreground">
                                   S/{plato.precio}
                                 </span>
-                                {plato.categoria === 'bebidas' && plato.stockActual !== null && (
+                                {plato.categoria?.descuentaStock && plato.stockActual !== null && (
                                   <span className={[
                                     'text-xs font-medium',
                                     plato.stockActual <= 0 ? 'text-[var(--terracota)]' : 'text-[var(--salvia)]',
