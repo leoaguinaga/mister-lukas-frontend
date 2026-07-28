@@ -38,7 +38,7 @@ export const api = {
   },
   categorias: {
     list: () => apiFetch<import('./types').CategoriaCarta[]>('/categorias'),
-    create: (data: { nombre: string; slug: string; descuentaStock?: boolean; esParaCocina?: boolean; orden?: number }) =>
+    create: (data: { nombre: string; slug?: string; descuentaStock?: boolean; esParaCocina?: boolean; orden?: number }) =>
       apiFetch<import('./types').CategoriaCarta>('/categorias', {
         method: 'POST',
         body: JSON.stringify(data),

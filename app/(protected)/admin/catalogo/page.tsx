@@ -292,6 +292,158 @@ function BulkModal({
   );
 }
 
+// ─── Modal de Gestión de Categorías ───────────────────────────────────────────
+
+function CategoriasModal({
+  categorias,
+  onClose,
+  onRefresh,
+}: {
+  categorias: CategoriaCarta[];
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  const [nombre, setNombre] = useState('');
+  const [descuentaStock, setDescuentaStock] = useState(false);
+  const [esParaCocina, setEsParaCocina] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [actualizandoId, setActualizandoId] = useState<string | null>(null);
+
+  async function handleCrear() {
+    if (!nombre.trim()) {
+      toast.error('Ingresa el nombre de la categoría');
+      return;
+    }
+    setGuardando(true);
+    try {
+      await api.categorias.create({
+        nombre: nombre.trim(),
+        descuentaStock,
+        esParaCocina,
+      });
+      toast.success(`Categoría "${nombre.trim()}" creada`);
+      setNombre('');
+      setDescuentaStock(false);
+      setEsParaCocina(true);
+      onRefresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al crear categoría');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function handleToggleProp(
+    cat: CategoriaCarta,
+    field: 'descuentaStock' | 'esParaCocina',
+    value: boolean,
+  ) {
+    setActualizandoId(cat.id);
+    try {
+      await api.categorias.update(cat.id, { [field]: value });
+      toast.success(`Categoría "${cat.nombre}" actualizada`);
+      onRefresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al actualizar');
+    } finally {
+      setActualizandoId(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-xl p-6 flex flex-col max-h-[85vh] space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-3 shrink-0">
+          <div>
+            <h3 className="font-semibold text-lg text-[var(--carbon)]">Gestión de Categorías</h3>
+            <p className="text-xs text-muted-foreground">Crea nuevas categorías y configura sus reglas de stock e impresión</p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-[var(--carbon)] text-xl leading-none">×</button>
+        </div>
+
+        {/* Crear nueva categoría */}
+        <div className="rounded-xl border border-border bg-gray-50/60 p-4 space-y-3 shrink-0">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nueva Categoría</p>
+          <div className="space-y-2">
+            <input
+              type="text"
+              placeholder="Ej: Postres, Pescados, Vinos…"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              className="w-full h-10 px-3 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dorado)] bg-white"
+            />
+            <div className="grid grid-cols-2 gap-2 text-xs text-[var(--carbon)] pt-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={esParaCocina}
+                  onChange={(e) => setEsParaCocina(e.target.checked)}
+                  className="rounded border-border text-[var(--dorado)] focus:ring-[var(--dorado)]"
+                />
+                <span>Enviar comanda a Cocina</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={descuentaStock}
+                  onChange={(e) => setDescuentaStock(e.target.checked)}
+                  className="rounded border-border text-[var(--dorado)] focus:ring-[var(--dorado)]"
+                />
+                <span>Descuenta Stock (Reventa)</span>
+              </label>
+            </div>
+          </div>
+          <Button
+            onClick={handleCrear}
+            disabled={guardando || !nombre.trim()}
+            className="w-full h-9 bg-[var(--dorado)] hover:bg-[#c49238] text-[var(--carbon)] font-semibold text-xs"
+          >
+            {guardando ? 'Guardando…' : '+ Crear categoría'}
+          </Button>
+        </div>
+
+        {/* Listado de categorías */}
+        <div className="overflow-y-auto flex-1 space-y-2 pr-1">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Categorías Activas ({categorias.length})</p>
+          {categorias.map((cat) => (
+            <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl border border-border bg-white text-sm">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-[var(--carbon)] truncate">{cat.nombre}</p>
+                <p className="text-[11px] text-muted-foreground truncate">slug: {cat.slug}</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => handleToggleProp(cat, 'esParaCocina', !cat.esParaCocina)}
+                  disabled={actualizandoId === cat.id}
+                  className={[
+                    'text-[10px] font-semibold px-2.5 py-1 rounded-full transition-colors',
+                    cat.esParaCocina ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500 line-through',
+                  ].join(' ')}
+                  title="Toggle impresión en cocina"
+                >
+                  {cat.esParaCocina ? 'Cocina ✓' : 'Sin cocina'}
+                </button>
+                <button
+                  onClick={() => handleToggleProp(cat, 'descuentaStock', !cat.descuentaStock)}
+                  disabled={actualizandoId === cat.id}
+                  className={[
+                    'text-[10px] font-semibold px-2.5 py-1 rounded-full transition-colors',
+                    cat.descuentaStock ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500',
+                  ].join(' ')}
+                  title="Toggle descuento automático de stock"
+                >
+                  {cat.descuentaStock ? 'Stock 📉' : 'Sin stock'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function AdminCatalogoPage() {
@@ -306,6 +458,7 @@ export default function AdminCatalogoPage() {
   const [busqueda, setBusqueda]   = useState('');
   const [filtroCat, setFiltroCat] = useState<'todas' | string>('todas');
   const [bulkModalAbierto, setBulkModalAbierto] = useState(false);
+  const [categoriasModalAbierto, setCategoriasModalAbierto] = useState(false);
 
   const fetchPlatos = useCallback(async () => {
     try {
@@ -440,6 +593,16 @@ export default function AdminCatalogoPage() {
         />
       )}
 
+      {categoriasModalAbierto && (
+        <CategoriasModal
+          categorias={categorias}
+          onClose={() => setCategoriasModalAbierto(false)}
+          onRefresh={() => {
+            fetchPlatos();
+          }}
+        />
+      )}
+
       <div className="p-5 space-y-6 max-w-2xl mx-auto">
         <div className="flex items-baseline justify-between gap-3">
           <div>
@@ -448,7 +611,14 @@ export default function AdminCatalogoPage() {
               {platos.length} platos{sinStock > 0 && <span className="text-[var(--terracota)]"> · {sinStock} sin stock</span>}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap justify-end">
+            <Button
+              onClick={() => setCategoriasModalAbierto(true)}
+              variant="outline"
+              className="border-border text-[var(--carbon)] hover:bg-muted font-semibold"
+            >
+              Categorías ({categorias.length})
+            </Button>
             <Button
               onClick={() => setBulkModalAbierto(true)}
               variant="outline"
