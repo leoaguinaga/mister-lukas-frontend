@@ -10,7 +10,7 @@ const TABS = [
   { href: '/admin',               label: 'Inicio' },
   { href: '/admin/mesas',         label: 'Mesas' },
   { href: '/admin/catalogo',      label: 'Carta' },
-  { href: '/admin/promociones',   label: 'Promos' },
+  { href: '/admin/stock',         label: 'Stock' },
   { href: '/admin/usuarios',      label: 'Staff' },
   { href: '/admin/turnos',        label: 'Caja' },
   { href: '/admin/ticketeras',    label: 'Ticketeras' },

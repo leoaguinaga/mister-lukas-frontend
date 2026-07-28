@@ -49,6 +49,13 @@ export const api = {
         body: JSON.stringify(data),
       }),
   },
+  insumos: {
+    list: () => apiFetch<InsumoStock[]>('/insumos'),
+    create: (data: { nombre: string; unidadesPorUnidadDeCompra?: number; nombreUnidadMinima?: string; stockActual?: number }) =>
+      apiFetch<InsumoStock>('/insumos', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<{ nombre: string; unidadesPorUnidadDeCompra: number; nombreUnidadMinima: string; stockActual: number; activo: boolean }>) =>
+      apiFetch<InsumoStock>(`/insumos/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  },
   visitas: {
     get: (visitaId: string) => apiFetch<import('./types').Visita>(`/visits/${visitaId}`),
     crearPedido: (
