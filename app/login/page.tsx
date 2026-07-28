@@ -1,18 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { signIn, homeForRole, type Rol } from '@/lib/auth-client';
+import { signIn, useSession, homeForRole, type Rol } from '@/lib/auth-client';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { data: sessionData, isPending: sessionPending } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Redirigir si ya existe una sesión activa
+  useEffect(() => {
+    if (!sessionPending && sessionData?.user) {
+      const role = (sessionData.user as { role?: Rol }).role;
+      if (role) {
+        router.replace(homeForRole(role));
+      }
+    }
+  }, [sessionData, sessionPending, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,19 +34,23 @@ export default function LoginPage() {
 
       if (result?.error) {
         toast.error(result.error.message ?? 'No se pudo iniciar sesión');
+        setLoading(false);
         return;
       }
 
       if (!result?.data?.user) {
         toast.error('No se pudo iniciar sesión. Verificá tu conexión con el servidor.');
+        setLoading(false);
         return;
       }
 
+      const role = (result.data.user as { role?: Rol }).role;
       toast.success(`Bienvenido, ${result.data.user.name ?? ''}`);
-      router.push('/');
+
+      const target = role ? homeForRole(role) : '/';
+      window.location.href = target;
     } catch {
       toast.error('Error de conexión con el servidor');
-    } finally {
       setLoading(false);
     }
   }
